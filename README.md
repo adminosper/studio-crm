@@ -21,6 +21,36 @@ docker compose up --build
 The runnable FastAPI module lives in `app/`.
 The reviewer seed data is created by PostgreSQL during container initialization.
 
+## Inspect Seed Data
+
+There is intentionally no tenant-listing helper endpoint in the API surface. Tenant isolation is central to this slice, so seeded tenant and lead inspection should happen through the seed file or through `psql`.
+
+Seed source:
+
+- [app/db/seed.sql](/Users/shagunarora/work-in-progress/meraki-labs-assignment/app/db/seed.sql)
+
+Open a Postgres shell:
+
+```bash
+cd app
+docker exec -it meraki_lead_scoring-postgres-1 psql -U meraki -d meraki_lead_scoring
+```
+
+Useful queries:
+
+```sql
+SELECT id, name, mql_score_threshold, sql_score_threshold
+FROM tenants;
+
+SELECT id, tenant_id, name, email, stage, score, status
+FROM leads
+ORDER BY created_at;
+
+SELECT id, tenant_id, rule_name, rule_type, score_delta, is_active
+FROM lead_scoring_rules
+ORDER BY created_at;
+```
+
 ## Verify
 
 ```bash
