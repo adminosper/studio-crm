@@ -118,3 +118,39 @@ To ensure clean querying and performance, developers must follow these rules:
   * **V1 Behavior:** AI-assisted outbound flows are considered globally active for all tenants. Startups wishing to avoid AI-assisted outbounds simply do not configure sequences with AI-assisted draft steps.
   * **V2 Target Behavior:** A boolean toggle (`ai_outbound_enabled`, default `true`) on the tenant table will allow tenant/super admins to disable the feature. Disabling it will automatically drop/skip MQL draft jobs in the queue and mark enrollment steps as `skipped`.
 
+---
+
+## 7. Deferred Lead Scoring Features (V2)
+
+* **Super Admin Default Scoring Rules:** In V1, all scoring rules and scores are set exclusively by tenants. Providing default, studio-wide scoring rules that tenants inherit or override is deferred to V2.
+* **Auto-Generating Fit Rules from ICP:** In V1, tenants manually define firmographic fit rules. In V2, the system could automatically synthesize fit rules based on the `ICPProfile` configured during onboarding.
+* **Complex Nested Boolean Logic:** In V1, fit rules and behavior rules are evaluated additively. Complex `AND/OR` grouping within a single rule is deferred to V2.
+* **Alternative Identity Resolution:** In V1, the behavioral scoring engine relies entirely on `person.properties.email` matching `Lead.email` to resolve PostHog aggregates. Handling edge cases where an identified user has no email (relying on other identity attributes or maintaining an internal `distinct_id` synchronization flow) is deferred to V2.
+
+---
+
+## 8. Lead Operational Status vs. Lifecycle Stage Separation
+
+* **Decision:** The `Lead` entity uses two separate fields to track distinct concerns:
+  * **`status`** (operational): `active` | `disqualified` | `converted`. Controlled by users or the system. Determines whether the lead is eligible for scoring, enrollment, or outbound execution. Leads with `status IN ('disqualified', 'converted')` are frozen — their score and stage are not updated and they are excluded from all outbound queues.
+  * **`stage`** (lifecycle): `pre_mql` | `mql` | `sql`. Controlled exclusively by the Scoring Engine based on computed score vs. tenant-defined thresholds. Determines which outbound automation applies.
+* **Why:** Conflating operational status with marketing lifecycle stage into a single enum (as originally modelled with `new`, `qualified`, `disqualified`) creates ambiguity — a lead could be MQL (high score) but also manually disqualified. Separating the two concepts avoids this and cleanly maps to the Outbound Automation rules (stage → sequence type) and Scoring Engine (status → skip or score).
+
+---
+
+## 9. Lead Records Are Not Deletable in V1
+
+* **Decision:** Leads cannot be deleted by users in V1. The only way to "remove" a lead from active workflows is to set `status = disqualified`.
+* **Details:**
+  * No `deleted_at` soft-delete field exists on the `Lead` entity.
+  * Setting `status = disqualified` freezes the lead: scoring stops, outbound enrollments are cancelled, and the lead is excluded from all operational views by default.
+  * This decision preserves outbound email history (`StaticOutboundEmail`, `AIOutboundEmail`) which would become orphaned if the lead record were soft-deleted.
+  * Re-activating a lead is simple: set `status = active`.
+* **V2:** GDPR erasure (right-to-be-forgotten) requests require a dedicated scrubbing pipeline that physically deletes or anonymises PII across multiple tables. This is a compliance workflow, not a user-facing CRUD operation, and is deferred to V2.
+
+---
+
+## 10. Performance Marketing Attribution (Subproblem 4) — Detailed Spec Deferred to V2
+
+* **Decision:** The V1 design session confirmed the high-level approach for marketing attribution (PostHog JS SDK captures UTM parameters; these are synced to the local CRM database). However, the detailed functional specification — including the UTM data model, the attribution dashboard functional requirements, and the studio-level portfolio-wide rollup view — is deferred to V2.
+* **Why:** V1 scope is already broad (Lead Scoring, Outbound Automation, Studio Bootstrap, Deal Management). Adding a full attribution data pipeline increases complexity without delivering core CRM value in the first release.

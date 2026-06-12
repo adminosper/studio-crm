@@ -94,7 +94,79 @@ sequenceDiagram
 
 ---
 
-### 2. Tenant Initial Setup & Onboarding Flow
+## Lead Scoring & Lifecycle Flows
+
+### 2. Lead Scoring & Qualification Pipeline
+
+This flow covers the batch scoring process (triggered by cron or manual CTA), the HogQL aggregation of behavioral events, the evaluation of qualification thresholds, and the resulting stage transitions which emit events to halt or start outbound sequences.
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    participant CronScoring as Scoring Cron (Daily / 24h)
+    participant TA as Tenant Admin (Manual CTA)
+    participant Sys as CRM API (Scoring Engine)
+    participant PH as PostHog API
+    participant DB as Database
+    participant MQ as Message Queue
+    participant OW as Outbound Worker
+
+    Note over CronScoring,Sys: Phase 1 — Triggering the Scoring Run
+    alt Automated Daily Run
+        CronScoring->>Sys: Execute Scoring Module (tenant_id=all, lead_id=null)
+    else Manual Rescore (CTA)
+        TA->>Sys: POST /scoring/recompute
+        Sys->>Sys: Execute Scoring Module (tenant_id=current, lead_id=optional)
+    end
+
+    Note over Sys,DB: Phase 2 — Rule & Event Aggregation
+    Sys->>DB: Load active LeadScoringRules for Tenant
+    
+    alt Behavior Rules Exist
+        Sys->>PH: POST /api/projects/:id/query (HogQL)
+        Note right of PH: SELECT person.properties.email, count() GROUP BY email
+        PH-->>Sys: Aggregated event counts per email
+    end
+
+    Note over Sys,DB: Phase 3 — Score Computation & Stage Update
+    Sys->>DB: SELECT * FROM leads WHERE status = 'active'
+    loop For Each Active Lead
+        Sys->>Sys: Calculate Fit Score (Lead firmographic fields vs. fit rules)
+        Sys->>Sys: Calculate Behavior Score (PostHog aggregates vs. behavior rules, capped at 100)
+        Sys->>Sys: new_score = sum(matched deltas), capped at 100
+
+        alt is_stage_manually_overridden = false
+            Sys->>Sys: Evaluate thresholds → new_stage (pre_mql / mql / sql)
+        else
+            Sys->>Sys: new_stage = old_stage (skip threshold evaluation)
+        end
+
+        Sys->>DB: UPDATE leads SET score=new_score, stage=new_stage, score_last_updated_at=NOW()
+
+        alt Stage has changed
+            Sys->>MQ: Publish LEAD_STAGE_CHANGED_JOB (lead_id, old_stage, new_stage)
+        end
+    end
+
+    Note over MQ,OW: Phase 4 — Enrollment Lifecycle (Outbound Worker)
+    MQ->>OW: Consume LEAD_STAGE_CHANGED_JOB
+
+    alt Promoted: pre_mql → mql
+        OW->>DB: UPDATE StaticOutboundEnrollment SET status='cancelled_stage_promoted'
+        OW->>DB: INSERT AIOutboundEnrollment (step 1, next_step_due_at=NOW())
+    else Promoted: mql → sql
+        OW->>DB: UPDATE AIOutboundEnrollment SET status='cancelled_stage_promoted'
+        Note right of OW: SQL stage — manual sales only, no auto enrollment
+    else Demoted: mql → pre_mql
+        OW->>DB: UPDATE AIOutboundEnrollment SET status='cancelled_stage_demoted'
+        OW->>DB: INSERT StaticOutboundEnrollment (restart pre-mql sequence)
+    end
+```
+
+---
+
+### 3. Tenant Initial Setup & Onboarding Flow
 
 This flow illustrates the post-login setup checklist completed by the Tenant Admin to establish tracking, configure the target client profile (ICP), and define the inbound triggers for automated lead generation.
 
@@ -142,7 +214,7 @@ sequenceDiagram
 
 ## Outbound Automation Flows
 
-### 3. Pre-MQL Outbound Execution Flow
+### 4. Pre-MQL Outbound Execution Flow
 
 This flow covers the runtime execution path for Pre-MQL outbound sequences: from a trigger event (new lead created or existing lead fires an event) through enrollment, scheduled execution via cron, and the stop conditions that cancel an active sequence.
 
@@ -211,7 +283,7 @@ sequenceDiagram
 
 ---
 
-### 4. MQL AI-Assisted Outbound Execution Flow
+### 5. MQL AI-Assisted Outbound Execution Flow
 
 This flow covers the generative loop and approval lifecycle for AI outbounds, operating off the array-based schedule.
 
@@ -275,7 +347,7 @@ sequenceDiagram
 
 ## Super Admin Parent Workspace Flows
 
-### 5. Super Admin Parent Workspace Operations
+### 6. Super Admin Parent Workspace Operations
 
 This flow covers the three ongoing operational interactions available to Super Admins within the Parent Workspace (studio context): viewing the rolled-up portfolio dashboard, switching into a tenant workspace to take action, and managing the studio-wide AI Base Instruction (including its propagation and tenant override lifecycle).
 

@@ -5,3 +5,5 @@
 5. Answer properly on why we are chosing posthog over any other event tracking system.
 6. How role+context will work together ?
 7. Read about pgBouncer
+8. Will posthog give all historical data for a user, if user identification done after having some anonymous data as well, which was mapped later, will webhook receive all events in past by the user ?
+9. How GDPR or other compliances are handled ? We are storing lead data. Is it even required ?

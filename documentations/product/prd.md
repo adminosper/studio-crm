@@ -50,9 +50,12 @@ These features are strictly isolated per startup tenant.
     *   Custom pipelines and stage configurations per tenant.
     *   Stage transition audit trails and simple forecasting engine.
 3.  **Lead Scoring & Qualification:**
-    *   Integration with **PostHog** for user event tracking (web visits, clicks).
-    *   Tenant-specific scoring rules (Fit-based and Behavior-based).
-    *   Automatic qualification transitions (Lead → MQL → SQL) based on scores and high-intent actions.
+    *   Integration with **PostHog** for user event tracking.
+    *   **Rule Types:** Tenant-defined Fit rules (static firmographics) and Behavior rules (event aggregations). Both share a single DB table using JSONB configurations.
+    *   **Computation & Scale:** Scores are computed out of 100 (validation enforced at API layer). Computed via a daily cron job or manual trigger per tenant. Uses PostHog's HogQL API for efficient batch aggregation of behavioral events.
+    *   **Qualification Transitions:** The cron automatically maps computed scores to `Lead.stage` (`pre_mql`, `mql`, `sql`) based on tenant-defined threshold limits (`mql_score_threshold`, `sql_score_threshold`).
+    *   **Status vs Stage:** A lead's operational `status` (`active`, `disqualified`, `converted`) is distinct from its lifecycle `stage`. Converted/disqualified leads are frozen and skipped during scoring.
+    *   **Overrides:** Reps can manually override a lead's stage; the system prevents the cron from downgrading manually overridden leads.
 4.  **Performance Marketing Attribution:**
     *   Extraction of UTM parameters (`utm_source`, `utm_medium`, etc.) from PostHog events.
     *   Local database synchronization of UTM parameters for low-latency queries.
@@ -183,10 +186,10 @@ This scenario covers two distinct workflows: tenant-driven CRUD operations and s
 
 All operations are scoped to the authenticated user's tenant. Standard CRUD is exposed via the API and enforced with RLS.
 
-- **List / Read:** Startup members can view their tenant's lead records only. Supports filtering by status, source, owner, and date range.
-- **Manual Create:** Permitted users create a lead by providing: Name, Email, Company, Source, Phone, Title, Notes. Email is mandatory and must be unique per tenant.
-- **Update:** Permitted users can edit any lead field. All mutations are timestamped.
-- **Delete:** Soft-delete only — sets `deleted_at`. Records are excluded from all views and API responses but retained for audit purposes.
+- **List / Read:** Startup members can view their tenant's lead records only. Supports filtering by status, stage, source, owner, and date range.
+- **Manual Create:** Permitted users create a lead by providing: Name, Email, Company, Industry, Company Size, Geography, Source, Phone, Title, Notes. Email is mandatory and must be unique per tenant.
+- **Update:** Permitted users can edit any lead field (including `status = disqualified` to freeze a lead). All mutations are timestamped.
+- **No Deletion (V1):** Leads cannot be deleted. Setting `status = disqualified` is the only way to remove a lead from active workflows. See [Decision 9](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/decisions.md#9-lead-records-are-not-deletable-in-v1) for rationale.
 - **Authorization:** Role-based. Sales Reps can create/update their own leads. Tenant Admins and Growth Marketers have broader access. Refer to [Multi-Tenancy Isolation Strategy](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/decisions.md#2-multi-tenancy-isolation-strategy) for role-level enforcement. (Can be taken in v2)
 
 ---
@@ -219,7 +222,58 @@ Leads can be automatically created from user activity tracked via PostHog. This 
 
 ---
 
-### C. Deal Creation & Lifecycle Management
+### C. Lead Scoring & Qualification
+
+This scenario covers tenant-defined scoring rules, the batch computation pipeline, and the lifecycle transitions triggered when a lead's stage changes.
+
+#### 1. Scoring Rule Management (Tenant CRUD)
+
+- Tenant Admins access a **Scoring Rules** settings page.
+- Two rule types can be created and managed:
+  - **Fit Rules:** Evaluate static attributes on the `Lead` record (e.g., `industry = SaaS`, `company_size >= 200`).
+  - **Behavior Rules:** Evaluate event aggregates from PostHog (e.g., `pricing_page_viewed` count >= 1 in last 30 days).
+- Each rule has a `score_delta` (integer, positive or negative, e.g. +25 or -10).
+- **Score Budget Constraint:** The sum of all active `score_delta` values must not exceed 100. The API validates this on every rule create/update and returns a `400` error if exceeded. The UI shows a live *"X points remaining"* counter.
+- **Allowed Fit Attributes:** Strictly validated at the API layer. Only Lead-record fields are permitted: `title`, `company`, `source`, `industry`, `company_size`, `geography`.
+- **Allowed Behavior Operators:** `count >= N` and `count == N` against a PostHog event within an optional `time_window_days` lookback. Property filters on event properties are supported (JSONB field).
+- Rules are stored in a single `LeadScoringRule` table with `rule_type` (`fit` | `behavior`) and `rule_config` (JSONB). A DB `CHECK` constraint enforces JSON structure per rule type.
+
+#### 2. Qualification Threshold Configuration
+
+- Tenant Admins define two integer thresholds stored on the `Tenant` record:
+  - `mql_score_threshold` (default: 50) — leads scoring at or above this enter `mql` stage.
+  - `sql_score_threshold` (default: 80) — leads scoring at or above this enter `sql` stage.
+- Leads below `mql_score_threshold` remain `pre_mql`.
+
+#### 3. Score Computation
+
+- **Trigger:** A `Scoring Cron` (every 24h) or a manual `POST /scoring/recompute` CTA (per tenant, optionally per lead).
+- **Skipped leads:** Any lead with `status IN ('disqualified', 'converted')` is skipped — their score and stage are not recomputed.
+- **Fit evaluation:** In-process, comparing lead fields against active fit rules.
+- **Behavior evaluation:** One HogQL query per active behavior rule per tenant. Query pattern: `SELECT person.properties.email, count() FROM events WHERE event = :name AND timestamp >= NOW() - INTERVAL :window DAY GROUP BY email`. Results are held in memory and matched against leads by email.
+- **Stage determination:** After computing the new score, if `is_stage_manually_overridden = false`, the system derives the new stage from the threshold config. If the flag is `true`, the stage is preserved.
+- **Persistence:** `Lead.score`, `Lead.stage`, `Lead.score_last_updated_at` are updated atomically. If the stage changes, a `LEAD_STAGE_CHANGED_JOB` is published to the queue.
+
+#### 4. Stage Transition Orchestration (Outbound Worker)
+
+The `LEAD_STAGE_CHANGED_JOB` is consumed by the Outbound Worker, which owns all enrollment lifecycle changes:
+
+| Transition | Action |
+|---|---|
+| `pre_mql` → `mql` | Cancel active `StaticOutboundEnrollment` (status = `cancelled_stage_promoted`). Create new `AIOutboundEnrollment`. |
+| `mql` → `sql` | Cancel active `AIOutboundEnrollment` (status = `cancelled_stage_promoted`). No new enrollment — SQL is manual-only. |
+| `mql` → `pre_mql` (demotion) | Cancel active `AIOutboundEnrollment` (status = `cancelled_stage_demoted`). Create new `StaticOutboundEnrollment`. |
+
+#### 5. Manual Stage Override
+
+- A Sales Rep can manually set `Lead.stage` to any value via the UI.
+- Setting a manual override also sets `Lead.is_stage_manually_overridden = true`.
+- The Scoring Engine will not update the stage on subsequent runs, though the score is still computed and updated.
+- A rep can clear the override at any time to let the scoring engine resume control.
+
+---
+
+### D. Deal Creation & Lifecycle Management
 
 This scenario covers pipeline stage customization, deal tracking, and basic sales forecasting.
 
@@ -248,7 +302,7 @@ All deal operations are scoped to the authenticated user's tenant context.
 
 ---
 
-### D. Outbound Automation Service
+### E. Outbound Automation Service
 
 This scenario outlines the rules, templates, and AI orchestration parameters used to drive targeted email sequences across different prospect lifecycle stages.
 
@@ -300,7 +354,7 @@ This scenario outlines the rules, templates, and AI orchestration parameters use
 
 ---
 
-### E. Parent Workspace (Super Admin View)
+### F. Parent Workspace (Super Admin View)
 
 This section describes features available exclusively to Venture Studio Super Admins to monitor and analyze portfolio-wide performance.
 

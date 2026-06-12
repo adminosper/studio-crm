@@ -60,6 +60,8 @@ Under this level, each portfolio startup operates in complete isolation. Startup
 - **Lead/Deal UTM Syncing:** Ingestion of UTMs from web form submissions or PostHog identification webhooks.
 - **Attribution Dashboard:** Tenant dashboards displaying metrics like Lead/Deal counts and pipeline revenue generated per marketing source/medium/campaign.
 
+> **V2 Note:** Detailed functional specification and data modelling for this subproblem is deferred to V2. The V1 design session confirmed the overall approach (PostHog JS SDK captures UTMs, synced to local DB) but the full spec — including the UTM data model, attribution dashboard functional requirements, and studio-level rollup view — are out of scope for V1.
+
 ### Subproblem 5: Outbound Automation (Tenant Execution)
 #### 1. Core Workflow
 - A rules-based, asynchronous messaging engine that triggers email/message sequences to leads based on stage changes or activity thresholds.

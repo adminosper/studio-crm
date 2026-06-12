@@ -16,6 +16,8 @@ Represents a startup workspace under the venture studio.
 | `posthog_org_id` | string | PostHog organization ID (created at provisioning) |
 | `posthog_project_id` | string | PostHog project ID (created at provisioning) |
 | `posthog_project_api_key` | string | PostHog JS snippet key (stored securely) |
+| `mql_score_threshold` | integer | Default 50 |
+| `sql_score_threshold` | integer | Default 80 |
 | `created_at` | timestamp | |
 | `deleted_at` | timestamp | Soft-delete |
 
@@ -100,15 +102,23 @@ A raw, unqualified prospect captured either manually or via automated events.
 | `name` | string | |
 | `email` | string | Unique per tenant |
 | `company` | string | |
+| `industry` | string | Firmographic field |
+| `company_size` | integer | Firmographic field |
+| `geography` | string | Firmographic field |
 | `phone` | string | |
 | `title` | string | Job title |
 | `source` | enum | `manual`, `posthog_website`, `linkedin_engagement` |
 | `notes` | text | |
-| `status` | enum | `new`, `qualified`, `disqualified` |
+| `status` | enum | `active`, `disqualified`, `converted` (Operational state) |
+| `stage` | enum | `pre_mql`, `mql`, `sql` (Lifecycle stage driven by score) |
+| `score` | integer | Computed total (ceiling 100) |
+| `score_last_updated_at` | timestamp | |
+| `is_stage_manually_overridden`| boolean | Default false. If true, prevents cron downgrade. |
 | `owner_user_id` | UUID | FK → User |
 | `created_at` | timestamp | |
 | `updated_at` | timestamp | |
-| `deleted_at` | timestamp | Soft-delete |
+
+> **Note:** Leads cannot be soft-deleted in V1. Use `status = disqualified` to freeze a lead. See [Decision 9](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/decisions.md#9-lead-records-are-not-deletable-in-v1).
 
 ---
 
@@ -145,20 +155,21 @@ Ideal Customer Profile configured by the Tenant Admin during onboarding.
 
 ---
 
-### LeadScoringConfig *(V2 — Deferred)*
-Tenant-configured scoring dimensions for lead qualification. Each row represents one scoring rule (e.g., "company_size >= 500 → +10 points"). Multiple rows combine additively.
+### LeadScoringRule
+Tenant-configured scoring dimensions for lead qualification. Fit rules evaluate lead attributes; Behavior rules evaluate aggregated PostHog events.
 
 | Field | Type | Notes |
 |---|---|---|
-| `config_id` | UUID | Primary key |
+| `rule_id` | UUID | Primary key |
 | `tenant_id` | UUID | FK → Tenant |
-| `field` | string | Lead/person attribute to evaluate (e.g. `company_size`) |
-| `operator` | enum | `equals`, `gte`, `lte`, `contains`, `in` |
-| `value` | string | Comparison value |
-| `score_delta` | integer | Points to add if condition matches |
-| `is_active` | boolean | Only active configs are evaluated |
+| `rule_type` | enum | `fit`, `behavior` |
+| `score_delta` | integer | Points to add/subtract (e.g. 20, -10). Active sum <= 100. |
+| `is_active` | boolean | Only active rules are evaluated |
+| `rule_config` | JSONB | Schema depends on rule_type (e.g. fit operator vs event aggregate operator) |
 | `created_at` | timestamp | |
 | `updated_at` | timestamp | |
+
+> **Note:** The JSONB `rule_config` avoids sparse tables. A database `CHECK` constraint ensures the JSON structure matches the `rule_type`. The API layer strictly validates attributes (e.g., `fit` fields must be `industry`, `company_size`, etc.).
 
 ---
 
@@ -268,7 +279,7 @@ Tracks a specific lead's active or historical participation in a sequence. Acts 
 | `sequence_id` | UUID | FK → StaticOutboundSequence |
 | `current_step_position` | integer | The step that was last executed |
 | `next_step_due_at` | timestamp | When the next step should be executed. NULL when sequence is complete or stopped |
-| `status` | enum | `active` \| `completed` \| `paused_replied` \| `cancelled_stage_promoted` |
+| `status` | enum | `active` \| `completed` \| `paused_replied` \| `cancelled_stage_promoted` \| `cancelled_stage_demoted` |
 | `enrolled_at` | timestamp | When enrollment was created |
 | `updated_at` | timestamp | |
 
@@ -386,7 +397,7 @@ A unified state machine table for AI generated emails, tracking from draft queue
 Tenant 1──* User
 Tenant 1──1 ICPProfile
 Tenant 1──* LeadTriggerRule
-Tenant 1──* LeadScoringConfig (V2)
+Tenant 1──* LeadScoringRule
 Tenant 1──* Lead
 Tenant 1──* Account
 Tenant 1──* Contact
