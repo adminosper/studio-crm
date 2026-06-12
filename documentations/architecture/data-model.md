@@ -197,6 +197,11 @@ A sales opportunity linked to an Account and Contact.
 | `updated_at` | timestamp | |
 | `deleted_at` | timestamp | Soft-delete |
 
+> **Indexes & Optimization:**
+> * **Rollup Query Optimization B-tree Index:**
+>   `CREATE INDEX idx_deals_rollup ON deals (created_at, stage_id, amount) WHERE deleted_at IS NULL;`
+>   Used to optimize the parent workspace's rolled-up Sales pipeline calculations by performing Index-Only Scans.
+
 ---
 
 ## Outbound Service Entities (Static / Pre-MQL)
@@ -302,6 +307,13 @@ Stores the core LLM instructions. Tenants can override sections; missing fields 
 | `product_description` | text | Context on what the company sells. |
 | `created_at` | timestamp | |
 | `updated_at` | timestamp | |
+
+> **Constraints & Lifecycle:**
+> * **Unique constraints:**
+>   * A partial unique index must enforce that only one global default configuration exists: `CREATE UNIQUE INDEX idx_only_one_system_default ON ai_prompt_configurations (is_system_default) WHERE is_system_default = true;`
+>   * A unique index must enforce that a tenant has at most one custom configuration override: `CREATE UNIQUE INDEX idx_tenant_config_uniqueness ON ai_prompt_configurations (tenant_id) WHERE tenant_id IS NOT NULL;`
+> * **Provisioning:**
+>   * The global default row (`is_system_default = true`, `tenant_id = NULL`) is created by the first Super Admin during the **Studio Bootstrap** phase. Platform configuration prevents creating any tenant workspace until this record is inserted.
 
 ---
 

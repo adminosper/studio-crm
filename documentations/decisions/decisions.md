@@ -55,3 +55,66 @@ To ensure clean querying and performance, developers must follow these rules:
 
 * **Row-Level Security (RLS) for AI Tools:** To ensure absolute tenant isolation, the AI Worker executing function calls (e.g., `get_lead_history`) MUST initialize its database connection session with the active tenant's context role (`app_tenant_user`). This database-level guarantee prevents the LLM from inadvertently accessing or leaking another tenant's data, regardless of prompt hallucinations.
 * **LLM Data Privacy:** To protect proprietary CRM data from model training ingestion, the deployment should utilize a self-hosted private LLM (e.g. vLLM/Ollama in a VPC) or Enterprise APIs (AWS Bedrock, OpenAI Enterprise) covered under strict BAA no-training clauses.
+
+---
+
+## 5. Studio-Level Marketing Attribution Rollup (V2)
+
+* **Decision:** The rolled-up marketing attribution dashboard (parent/parent workspace view) is deferred to V2 due to timeline constraints.
+* **Details:**
+  * **Aggregation Goal:** The dashboard will aggregate UTM campaign performance (e.g., leads generated, pipeline revenue generated per campaign/source) across all portfolio startups (tenants) into a single, unified studio-level view.
+  * **Data Source:** This feature will be powered by PostHog events. Since each tenant has its own PostHog project tracking UTM parameters (`utm_source`, `utm_medium`, `utm_campaign`, etc.) at lead creation, the studio-level rollup only requires querying and aggregating this existing event data rather than setting up new tracking infrastructure.
+  * **Why:** Focus is prioritized on delivering core B2B CRM capabilities and the Sales rollup in V1.
+
+---
+
+## 6. Role-Based Access Control (RBAC) Model
+
+* **Decision:** Authorization is governed by two independent properties on every authenticated session: a fixed **identity role** and a dynamic **active workspace context**. Permissions are derived from their combination — neither alone is sufficient.
+
+* **Details:**
+
+  ### Identity Roles (Fixed)
+
+  Stored on the `User` record. Never changes at runtime.
+
+  | Role | Description |
+  |---|---|
+  | `super_admin` | Venture Studio operator. Global access. Manages tenants and studio-wide configuration. |
+  | `tenant_admin` | Startup lead or admin. Full access within their own tenant workspace. |
+  | `sales_rep` | Startup sales team member. Scoped operational access within their tenant workspace. |
+
+  ### Active Workspace Context (Dynamic)
+
+  Stored in the JWT. Changes when the tenant switcher is used.
+
+  | Context | Description |
+  |---|---|
+  | `studio` | The parent/admin workspace. Only `super_admin` can hold this context. |
+  | `tenant:<id>` | A specific startup workspace. All roles can hold this context (within their allowed scope). |
+
+  ### Combined Permission Matrix
+
+  | Role | `studio` Context | `tenant:<id>` Context |
+  |---|---|---|
+  | `super_admin` | View rolled-up Sales Dashboard (read-only across all tenants). Set/update `base_instruction` for AI outbound. Create tenant workspaces. Provision first tenant admin. | **Inherits full `tenant_admin` permissions** for that workspace. No special super-admin-only permissions inside a tenant view. |
+  | `tenant_admin` | ❌ Blocked — redirected to their tenant workspace on login. | Full tenant access: configure pipeline, scoring rules, set/override `tenant_instruction` (V1), invite team members, full CRUD on all tenant data. |
+  | `sales_rep` | ❌ Blocked. | Operational access: CRUD on leads and deals (own and team-visible). Approve/reject AI draft emails. Cannot modify any workspace configuration. |
+
+  ### Database Role Derivation
+
+  The API middleware reads the JWT on every request and selects the appropriate database connection role:
+
+  | Identity Role + Context | DB Role Assigned | Effective DB Permissions |
+  |---|---|---|
+  | `super_admin` + `studio` | `app_studio_user` | Cross-tenant `SELECT` on all tables. All writes blocked. |
+  | `super_admin` + `tenant:<id>` | `app_tenant_user` with `SET LOCAL tenant_id = <id>` | Tenant-scoped read/write (same as tenant_admin). |
+  | `tenant_admin` + `tenant:<id>` | `app_tenant_user` with `SET LOCAL tenant_id = <id>` | Tenant-scoped read/write. RLS enforces isolation. |
+  | `sales_rep` + `tenant:<id>` | `app_tenant_user` with `SET LOCAL tenant_id = <id>` | Tenant-scoped read/write. RLS enforces isolation. Row-level action restrictions enforced at application layer. |
+
+  ### AI Outbound Opt-Out (Deferred to V2)
+
+  * **Decision:** The per-tenant toggle to disable AI-assisted outbound is deferred to V2 due to timeline constraints. This avoids adding extra boolean columns or logic handling queue cancellations in V1.
+  * **V1 Behavior:** AI-assisted outbound flows are considered globally active for all tenants. Startups wishing to avoid AI-assisted outbounds simply do not configure sequences with AI-assisted draft steps.
+  * **V2 Target Behavior:** A boolean toggle (`ai_outbound_enabled`, default `true`) on the tenant table will allow tenant/super admins to disable the feature. Disabling it will automatically drop/skip MQL draft jobs in the queue and mark enrollment steps as `skipped`.
+

@@ -69,7 +69,6 @@ These features roll up data across all startups and allow parent-level defaults.
 6.  **Venture Studio Parent Workspace (Super Admin Role):**
     *   Tenant switcher dropdown in the navigation header to toggle between startup instances.
     *   Rolled-up Sales Dashboard displaying aggregated pipeline metrics (Total Value, Total Won, Total Lost) for a date range across all startup tenants.
-    *   Rolled-up Marketing Dashboard displaying aggregated leads and pipeline revenue generated per UTM campaign/source across all startup tenants.
     *   Centralized default prompt and parameter templates for the AI Outbound Engine (which tenants can inherit or override).
 
 ---
@@ -90,6 +89,9 @@ The following features are deliberately deferred to ensure a focused and robust 
 3.  **Advanced AI Reply Handling:**
     *   Fully automated categorization of inbound email replies (e.g., Interested, Not Interested, Out of Office).
     *   Auto-drafting of follow-up email replies for rep approval based on response sentiment.
+4.  **Rolled-Up Marketing Attribution Dashboard:**
+    *   Aggregated leads and pipeline revenue generated per UTM campaign/source across all startup tenants (parent workspace view).
+    *   Powered by querying/aggregating PostHog event data from individual tenant projects.
 
 ---
 
@@ -122,11 +124,31 @@ This section documents explicit architectural components that require re-evaluat
 
 As we align on individual system scenarios, we will specify detailed functional requirements and reference their corresponding sequence diagrams here.
 
-### A. Workspace & User Provisioning (Tenant & Member Onboarding)
-This scenario outlines how workspace instances are initialized, how startups are added, and how users are securely provisioned through a delegated model.
+### A. Workspace & User Provisioning (Studio Bootstrap & Tenant Onboarding)
 
-#### 1. Core Workflow
-- **System Bootstrapping:** Initial Super Admin credentials and roles are seeded directly in the database (via migrations or CLI seed scripts) rather than exposing a public signup endpoint.
+This scenario covers two sequential phases: studio-level setup (performed once by the Super Admin before any tenant is provisioned) and tenant provisioning (repeated for each new startup added to the portfolio).
+
+> **RBAC Reference:** All access rules in this section derive from the combined identity role + active workspace context model. Refer to [Decision 6: RBAC Model](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/decisions.md#6-role-based-access-control-rbac-model) for the full permission matrix and DB role derivation.
+
+---
+
+#### Workflow 1: Studio Bootstrap (Super Admin First-Time Setup)
+
+Performed **once** when the venture studio platform is first deployed. No tenant can be created or onboarded until this is complete.
+
+- **System Bootstrapping:** The first Super Admin account is seeded directly into the database via a migration or CLI seed script. No public signup endpoint exists.
+- **Forced Onboarding Checklist:** On first login, the Super Admin is presented with a mandatory setup checklist. They cannot navigate to any other part of the platform or create any tenant workspaces until all required items are complete:
+  1. **Set AI Base Instruction (Required — Hard Gate):** The Super Admin must define the default `base_instruction` for AI-assisted outbound emails. This establishes the studio-wide default tone, brand voice, and compliance rules that all tenants inherit. Until this is saved, tenant creation is blocked.
+- **Post-Bootstrap State:** Once the checklist is complete, the platform unlocks. The Super Admin lands on the Parent Workspace (studio context) and can begin provisioning tenant workspaces.
+
+**Ongoing:** The Super Admin can update the `base_instruction` at any time from the studio settings. Refer to **Section 7.E.2 (AI Base Instruction Management)** for the update flow and its effect on tenant overrides.
+
+---
+
+#### Workflow 2: Tenant Provisioning & Member Onboarding
+
+Performed for each new startup added to the portfolio.
+
 - **Tenant Creation:** A logged-in Super Admin creates a new Tenant Workspace by providing metadata (e.g., Startup Name, Tenant ID, contact).
 - **Tenant Admin Provisioning:** Along with tenant creation, the Super Admin inputs the email of the designated Tenant Admin (the startup's lead or administrator).
 - **Activation Email Trigger:** The system generates a cryptographically secure, time-sensitive onboarding link (activation token with a configurable expiry, e.g., 48 hours) and sends an activation email to the Tenant Admin.
@@ -138,12 +160,13 @@ This scenario outlines how workspace instances are initialized, how startups are
 - **Delegated Team Provisioning (Self-Serve):** To eliminate operational bottlenecks at the Venture Studio level, the Tenant Admin can invite team members (e.g., Sales Reps, Growth Marketers) directly from their workspace settings by inputting their emails and selecting their roles.
 - **Member Activation:** Invited members receive a secure activation email, set their passwords, and are granted access to that specific tenant workspace.
 
-#### 2. Key Rules & Constraints
+#### Key Rules & Constraints
+- **Tenant Creation Gate:** A tenant workspace cannot be created if the Studio Bootstrap checklist (Workflow 1) is incomplete. Specifically, `base_instruction` must exist before any tenant can be provisioned.
 - **Absolute Isolation:** Users provisioned under a specific tenant workspace are strictly restricted to that tenant's database partition/scope. They must not have access to metadata, leads, contacts, or deals belonging to other tenants.
-- **Super Admin Scope:** Super Admins have a global context, enabling them to switch workspaces dynamically via a tenant-selector interface.
+- **Super Admin in Tenant Context:** When a Super Admin switches into a tenant workspace, they inherit full `tenant_admin` permissions for that workspace. Their identity role (`super_admin`) does not change — only the active workspace context in the JWT updates.
 - **Token Validity:** Activation tokens must be single-use and expire after their configured duration. Clicking an expired or used token must display a clear validation error with an option to request a new link from the inviter.
 
-#### 3. Related Diagrams
+#### Related Diagrams
 - For the step-by-step sequence diagram of the initial workspace creation flow, refer to [1. Initial Tenant Registration & Delegation Flow](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/user-flows.md#1-initial-tenant-registration--delegation-flow).
 - For the step-by-step sequence diagram of the onboarding and configuration flow, refer to [2. Tenant Initial Setup & Onboarding Flow](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/user-flows.md#2-tenant-initial-setup--onboarding-flow).
 
@@ -308,6 +331,41 @@ This section describes features available exclusively to Venture Studio Super Ad
         *   This index allows the query planner to filter by date range, join with pipeline stages, and sum amounts directly from the index (Index-Only Scan), avoiding expensive heap scans.
     *   **Performance Expectation:** Based on the V1 design envelope of 100 tenants with ~100 deals each (10K total deals), on-the-fly SQL aggregation utilizing these indexes will execute in **10–20ms** (steady-state, warm buffer cache) to **~50ms** (worst-case: cold buffer cache, physical index page reads, WAL replay lag on the read replica) end-to-end. Both ranges are well within acceptable UI response budgets, making cached or pre-aggregated tables unnecessary for V1.
     *   **Scale Limits & Re-evaluation:** Refer to **Section 6.1 (Super Admin Rolled-Up Sales Dashboard)** for the migration path (Redis caching layer, then two-tier nightly aggregate table) if database deal volume exceeds the V1 design envelope.
+
+---
+
+#### 2. AI Base Instruction Management
+
+*   **What it is:** The studio-wide default prompt instruction (`base_instructions`) that acts as the starting template for all AI-assisted outbound email generation across all tenant workspaces. Stored as a system-default record in `AIPromptConfiguration`. Tenants inherit this by default; they can optionally override it with a tenant-specific `AIPromptConfiguration` record.
+
+*   **Super Admin: Set / Update Flow:**
+    *   The Super Admin can view and edit the studio-wide `base_instructions` from the studio settings at any time (post-bootstrap).
+    *   On save, the update takes effect for all tenants who have **not** overridden — their next AI draft generation will use the updated studio-wide instruction.
+    *   Tenants who **have** overridden are completely unaffected. Their custom `base_instructions` remains the source of truth. Studio changes have zero effect on them.
+
+*   **Data Model (AIPromptConfiguration):**
+    *   **Studio Base Config:** A row in `AIPromptConfiguration` where `is_system_default = true` and `tenant_id = NULL`. The field `base_instructions` stores the studio default prompt.
+    *   **Tenant Override Config:** A row in `AIPromptConfiguration` with the tenant's `tenant_id` and `is_system_default = false`. The field `base_instructions` stores the tenant's custom prompt override.
+    *   **Resolution Logic:** At draft-generation time:
+        ```sql
+        -- Fetch active instruction: use tenant override if exists, fallback to studio default
+        SELECT base_instructions 
+        FROM ai_prompt_configurations 
+        WHERE (tenant_id = :tenant_id AND is_system_default = false) 
+           OR (is_system_default = true)
+        ORDER BY is_system_default ASC 
+        LIMIT 1;
+        ```
+
+*   **Tenant: Instruction Settings Page:**
+    *   **If not overridden:** Tenant admin sees the studio-wide `base_instructions` as read-only, with a *"Customize for my workspace"* action to create an override (which creates a tenant-specific row in `AIPromptConfiguration`).
+    *   **If overridden:** Tenant admin sees their own `base_instructions` override in edit mode. A collapsible *"View Studio Default"* panel shows the current studio-wide `base_instructions` for reference — so they can manually incorporate studio updates if they choose to.
+    *   **Revert to Base:** Tenant admin can delete their override at any time (which deletes their tenant-specific row in `AIPromptConfiguration`), automatically reverting the workspace to the studio-wide default.
+
+*   **Key Rules & Constraints:**
+    *   Tenant overrides are fully isolated. Super Admin changes to the studio-wide `base_instructions` never propagate to tenants who have custom configurations.
+    *   Tenant admins cannot see or edit another tenant's configuration.
+    *   Super admins in tenant context (having switched workspaces) can view and edit the tenant's custom `base_instructions` with the same UX as a tenant admin.
 
 ---
 

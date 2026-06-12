@@ -3,3 +3,5 @@
 3. CRUD operations will also depend on role. We will clearly define where roles are defined to ensure the same. (later)
 4. Should we explicitly write DQL handling etc ? (Think at the end)
 5. Answer properly on why we are chosing posthog over any other event tracking system.
+6. How role+context will work together ?
+7. Read about pgBouncer
