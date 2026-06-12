@@ -9,14 +9,31 @@ The Venture-Studio CRM is a multi-tenant platform designed to serve multiple sta
 
 ---
 
-## 2. Target Audience
+## 2. Scale Assumptions (V1 Design Envelope)
+
+All architectural decisions and query strategies documented in this PRD are designed against the following scale envelope:
+
+| Dimension | V1 Assumption | Notes |
+|---|---|---|
+| **Tenants (Startups)** | ~100 | Portfolio size of the Venture Studio |
+| **Deals per Tenant** | ~100 | Average across active startups |
+| **Total Deals (all tenants)** | ~10,000 | Primary driver for dashboard query load |
+| **Leads per Tenant** | ~500 | Estimated active lead pipeline |
+| **Total Leads (all tenants)** | ~50,000 | Secondary driver for outbound queue depth |
+| **Active Outbound Enrollments** | ~5,000 | Upper bound on concurrent cron scheduler rows |
+
+> **Note:** These are design-time assumptions. The system should be monitored against these bounds at production. See **Section 6 — Scale Revisit Thresholds** below for what needs re-evaluation if these limits are exceeded.
+
+---
+
+## 3. Target Audience
 *   **Venture Studio Admins:** Need roll-up reporting and cross-tenant performance overview.
 *   **Startup Admins/Growth Marketers:** Need to configure pipelines, scoring rules, and marketing attribution.
 *   **Startup Sales Representatives (SDRs/AEs):** Need to manage leads, convert contacts, move deals, and review/send automated outbound sequences.
 
 ---
 
-## 3. Release Phases & Scope
+## 4. Release Phases & Scope
 
 ### Phase 1 (V1 Scope)
 The initial release will focus on core B2B customer relationship operations, event-driven lead scoring, marketing attribution, and AI-powered sales outreach.
@@ -76,7 +93,7 @@ The following features are deliberately deferred to ensure a focused and robust 
 
 ---
 
-## 4. General Tenant Security & Data Constraints
+## 5. General Tenant Security & Data Constraints
 
 These constraints apply globally across all functionalities, tables, and services scoped under a startup workspace (Leads, Deals, Accounts, Contacts, etc.):
 
@@ -86,7 +103,22 @@ These constraints apply globally across all functionalities, tables, and service
 
 ---
 
-## 5. Functional Requirements & Scenarios
+## 6. Scale Revisit Thresholds
+
+This section documents explicit architectural components that require re-evaluation if the V1 scale assumptions (Section 2) are materially exceeded. All other components scale **operationally** (more queue workers, larger DB instance) without requiring design changes.
+
+### 6.1 Super Admin Rolled-Up Sales Dashboard
+
+- **Current V1 Design:** Queries are executed in real-time directly against the `Deal` and `DealPipelineStage` tables using a composite B-tree index on `(created_at, stage_id, amount) WHERE deleted_at IS NULL`. All queries are routed to a **read replica** via the `app_studio_user` role, ensuring zero impact on the primary transactional database. Expected end-to-end latency at 10K deals is **10–20ms** (steady-state) to **~50ms** (worst-case).
+- **Revisit Trigger:** When total `Deal` rows across all tenants exceeds **~50,000** rows, or when dashboard P95 response latency exceeds **500ms** under concurrent Super Admin load.
+- **Recommended Migration Path:**
+  1. **50K–500K deals:** Retain direct SQL but ensure queries are exclusively routed to the read replica. Add a Redis TTL cache (10-minute TTL) keyed by `(start_date, end_date, tenant_filter_hash)` to absorb repeated identical requests.
+  2. **500K+ deals:** Introduce a **two-tier aggregation strategy**:
+     - A nightly scheduled job (via `pg_cron` or external cron) materializes daily pre-aggregated rollups into a `StudioSalesDailyRollup` table. Standard fixed date-range requests (last 7/30/90 days, last quarter) are served from this table at sub-millisecond latency.
+     - Custom arbitrary date-range requests fall back to a bounded live SQL query on the read replica, with a rate limiter enforced per user session.
+---
+
+## 7. Functional Requirements & Scenarios
 
 As we align on individual system scenarios, we will specify detailed functional requirements and reference their corresponding sequence diagrams here.
 
@@ -242,5 +274,50 @@ This scenario outlines the rules, templates, and AI orchestration parameters use
 - **Rules:**
   - Automated or AI-assisted draft generation is disabled for leads that have reached the SQL / Deal stage.
   - All sales correspondence at this stage must be manually composed and sent by the assigned Sales Representative to preserve relationship integrity and alignment. (For v1)
+
+---
+
+### E. Parent Workspace (Super Admin View)
+
+This section describes features available exclusively to Venture Studio Super Admins to monitor and analyze portfolio-wide performance.
+
+#### 1. Rolled-Up Sales View (Dashboard)
+
+*   **What it is:** A consolidated, read-only portfolio dashboard that aggregates sales pipeline metrics across all startup tenants (workspaces) under the Venture Studio. This dashboard is intended strictly for portfolio oversight, performance comparison, and aggregated forecasting.
+*   **Access Control (Read-Only in V1):**
+    *   This view is strictly read-only. Super Admins can view aggregated data across all tenants but cannot create, edit, or delete any records from the parent workspace.
+    *   Access is governed by two things tracked independently: the user's **identity role** (fixed, stored in the user record) and their **active workspace context** (which workspace they are currently viewing, stored in the JWT). The role never changes; only the active workspace context changes when the tenant switcher is used.
+    *   To take any action on a tenant's data, a Super Admin must switch to that tenant's workspace using the tenant switcher. This updates the active workspace context in the JWT — the Super Admin's identity role remains unchanged throughout.
+*   **Data Covered:**
+    *   **Underlying Entities:**
+        *   `Tenant`: Used to group metrics by startup (e.g., startup name).
+        *   `Deal`: Source of transactional amounts, creation timestamps, delete status (`deleted_at`), and pipeline stages.
+        *   `DealPipelineStage`: Source of stage win probabilities, used for calculating active pipeline status and forecasting.
+    *   **Dashboard Metrics:**
+        *   **Total Deal Count:** Total number of non-deleted deals across all tenants (or filtered tenants) within the selected date range.
+        *   **Active Pipeline Value:** Sum of `Deal.amount` for all active deals (where stage probability is between `1%` and `99%`).
+        *   **Weighted Sales Forecast:** Sum of `Deal.amount * DealPipelineStage.probability` for all active deals.
+        *   **Closed Won Value & Count:** Sum of `Deal.amount` and count of deals where stage probability is `100%` (`Closed Won`).
+        *   **Closed Lost Value & Count:** Sum of `Deal.amount` and count of deals where stage probability is `0%` (`Closed Lost`).
+    *   **Filtering:** Filterable globally and per-tenant by date range matching `Deal.created_at`.
+*   **On-the-Fly Aggregation & SQL Index Optimization (V1 Strategy):**
+    *   **Direct SQL Querying:** Rather than using complex synchronization pipelines, external key-value stores, or materialized views (which in PostgreSQL do not refresh automatically and would require intensive trigger/refresh logic), V1 performs aggregations **on-the-fly** directly against the transactional database tables.
+    *   **Query Routing:** To prevent dashboard queries from impacting live transactional workloads, all parent workspace rollup queries are routed exclusively to a **read replica** database instance.
+    *   **Composite Indexing:** The `Deal` table utilizes a B-tree composite index optimized for this query structure:
+        *   Index definition: `CREATE INDEX idx_deals_rollup ON deals (created_at, stage_id, amount) WHERE deleted_at IS NULL;`
+        *   This index allows the query planner to filter by date range, join with pipeline stages, and sum amounts directly from the index (Index-Only Scan), avoiding expensive heap scans.
+    *   **Performance Expectation:** Based on the V1 design envelope of 100 tenants with ~100 deals each (10K total deals), on-the-fly SQL aggregation utilizing these indexes will execute in **10–20ms** (steady-state, warm buffer cache) to **~50ms** (worst-case: cold buffer cache, physical index page reads, WAL replay lag on the read replica) end-to-end. Both ranges are well within acceptable UI response budgets, making cached or pre-aggregated tables unnecessary for V1.
+    *   **Scale Limits & Re-evaluation:** Refer to **Section 6.1 (Super Admin Rolled-Up Sales Dashboard)** for the migration path (Redis caching layer, then two-tier nightly aggregate table) if database deal volume exceeds the V1 design envelope.
+
+---
+
+## 8. To-Explore
+
+Items listed here are **not decided** and have not been incorporated into the V1 design. They are flagged for future reading or evaluation before any implementation decision is made.
+
+| Item | Context | Why Deferred |
+|---|---|---|
+| **BRIN Index on `Deal.created_at`** | Block Range Index — low-overhead range index suited for append-heavy, sequentially-inserted tables. Would complement the composite B-tree index on the `Deal` table for date-range scans. | Needs further reading on BRIN trade-offs (low cardinality selectivity, suitability vs B-tree for this access pattern) before deciding if it adds value at V1 scale. |
+
 
 
