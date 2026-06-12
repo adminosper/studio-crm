@@ -1,0 +1,5 @@
+1. How this RLS works ? Will it work at time of writing queries/performing DB operation or at middleware level ?
+2. Is it necessary to keep tenant_id in all tables for RLS to work ?
+3. CRUD operations will also depend on role. We will clearly define where roles are defined to ensure the same. (later)
+4. Should we explicitly write DQL handling etc ? (Think at the end)
+5. Answer properly on why we are chosing posthog over any other event tracking system.

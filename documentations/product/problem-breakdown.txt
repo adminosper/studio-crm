@@ -1,0 +1,86 @@
+# Venture-Studio CRM Problem Breakdown
+
+The entire system is categorized into two distinct levels to ensure proper multi-tenant data isolation while enabling studio-wide growth insights and execution:
+1. **Tenant-Level (Individual Startup Workspace)**
+2. **Studio-Level (Parent Workspace / Super Admin Console)**
+
+---
+
+## Part A: Tenant-Level (Individual Startup Workspace)
+
+Under this level, each portfolio startup operates in complete isolation. Startup representatives can only view and manage data specific to their company.
+
+### Subproblem 1: Lead Generation and Management
+#### 1. Lead Generation Sources
+- Web forms (Contact Us, signups)
+- Chatbots & Live Chat widgets
+- Performance marketing campaigns (LinkedIn Ads, Google Ads)
+- Product-led events (Self-serve app registrations)
+- Direct emails and calendar sync
+- Manual outreach (Cold calls, industry events)
+#### 2. Solutions to Implement
+- **Manual Ingestion:** Admin/Sales interface to manually create and edit lead profiles.
+- **Automated Ingestion (Integration/Connector Layer):** API endpoints and Webhook handlers to automatically ingest and parse leads from webhooks/external forms per startup tenant.
+
+### Subproblem 2: Deal Creation and Lifecycle Management
+#### 1. Core Workflow
+- **Manual Creation & Updates:** Sales reps manually creating, updating, and moving deals across pipeline stages.
+- **Lead-to-Deal Conversion:** One-click conversion from a qualified Lead into associated Account, Contact, and Deal records. (v2)
+- **Stage History Audit Trail:** Systemic logging of every stage transition (timestamp, user, duration) for metrics.(logging may not be required, timestamps can evaluate on the fly based on data stored in DB ?)
+#### 2. Solutions to Implement
+- **Custom Pipeline Stages:** Tenant-specific pipelines (different startups can define their own stages and default probabilities).
+- **Historical Win-Rate Calculator:** An automated job/aggregation that computes win rates for each stage based on past closed-won vs. closed-lost deals.
+- **Admin Override Rules:** Interface for admins to manually set or override the win probabilities of pipeline stages.
+- **Forecast Engine:** Simple date-range query builder to compute total weighted period forecasts based on active deal values, current stage probabilities, and target close dates.
+
+### Subproblem 3: Lead Scoring and Qualification
+#### 1. Prerequisites (Event Tracking)
+- **Problem:** To calculate engagement/behavioral scores, the CRM must track user activity (web visits, clicks, page views).
+- **Options Evaluated:**
+  1. *Proprietary Tracking Script:* Gives control but introduces high complexity (deduplication of events, cookie-to-lead identity merging once identified, maintaining scripts, etc.).
+  2. *PostHog (Open-Source Product Analytics):* Leveraging PostHog for event capture.
+- **Selected Decision:** Use PostHog to handle event tracking.
+- **Multi-Tenancy Considerations (PostHog):** 
+  - Trade-off between creating a separate PostHog project per tenant vs. grouping all tenants' data in one project using a `tenant-name` property. 
+  - Note: Programmatic project creation in PostHog is not permitted, which impacts isolation strategy (discussed in https://claude.ai/chat/dadfbe8c-f755-4567-b5e7-be3a44e17a5b).
+#### 2. Lead Scoring & Qualification
+- **Scoring Rule Definition:** The system must allow admins to define customizable rules per tenant for:
+  - *Fit Scoring:* Based on demographic attributes (e.g., job title, company size, country).
+  - *Behavioral Scoring:* Based on event count/triggers received from PostHog (e.g., pricing page visited = +10).
+- **Scoring Engine:** A rule engine that computes and updates lead scores in real time or in batches based on lead attributes and event logs.
+- **Qualification Thresholds:** Tenant-configurable score thresholds to automatically transition leads:
+  - *Lead to MQL* (e.g., Score >= 50)
+  - *MQL to SQL* (e.g., Score >= 80 or high-intent direct action)
+
+### Subproblem 4: Performance Marketing Attribution (Tenant View)
+#### 1. Data Capture & Storage
+- **Automatic Tracking:** Handled by PostHog JS SDK (detects URL parameters on website visits and parses `$utm_source`, `$utm_medium`, `$utm_campaign`, `$utm_content`, `$utm_term`).
+- **Database Synchronization:** UTM parameters are synced and stored in the local CRM database (under Leads/Accounts/Deals) for low-latency dashboard loads and relational SQL queries (e.g., joining UTM source to closed deal value).
+#### 2. Solutions to Implement
+- **Lead/Deal UTM Syncing:** Ingestion of UTMs from web form submissions or PostHog identification webhooks.
+- **Attribution Dashboard:** Tenant dashboards displaying metrics like Lead/Deal counts and pipeline revenue generated per marketing source/medium/campaign.
+
+### Subproblem 5: Outbound Automation (Tenant Execution)
+#### 1. Core Workflow
+- A rules-based, asynchronous messaging engine that triggers email/message sequences to leads based on stage changes or activity thresholds.
+- Integrates with sales reps' mailboxes (SMTP/API) to send personalized messages from their identities.
+#### 2. Design Questions to Solve (Deep-Dive During System Design)
+1. *Who will define/set the rules for automated messages?* (Does each individual sales rep configure their own flows, or are rules defined globally by the tenant admin/marketer?)
+2. *AI Orchestration and Prompt Rules:* How do we structure the LLM prompt, context (lead's company size, website description, title), and instructions to generate accurate, natural-sounding outbound messages?
+3. *Human Manual Approval:* How will the system queue AI-generated outbound emails so a sales rep can review, edit, and manually approve them before sending?
+4. *Template-Driven vs. AI-Generated Messaging:* Can we use standard templates for lower-priority leads (e.g., Lead Score below a certain threshold) and reserve compute-heavy AI generation for high-score, high-value targets?
+
+---
+
+## Part B: Studio-Level (Parent Workspace / Super Admin Console)
+
+Under this level, Venture Studio administrators can monitor performance across all startups and define parent-level defaults.
+
+### Subproblem 6: Venture Studio Parent Workspace (Super Admin Role)
+#### 1. Core Workflow
+- Centralized console for Venture Studio Admins (Super Admins) to monitor and govern portfolio startups.
+- Allows switching between individual startup tenant workspaces (tenant selector dropdown) and viewing portfolio-wide roll-up reports.
+#### 2. Solutions to Implement
+- **Rolled-up Sales Dashboard:** Aggregated pipeline metrics (Total Value, Total Closed-Won, Total Closed-Lost, Win Rates) across all startup tenants, filterable by date range.
+- **AI Outbound Engine Rules (Parent Level):** Global default AI parameters and campaign prompts for outbound outreach that startups can inherit or selectively override.
+- **Rolled-up Marketing Attribution Dashboard:** Consolidated portfolio-wide overview of lead generation sources and performance marketing campaigns (UTM tracking) across all tenants.
