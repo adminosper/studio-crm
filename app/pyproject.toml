@@ -1,0 +1,31 @@
+[project]
+name = "meraki-labs-assignment"
+version = "0.1.0"
+description = "Lead scoring and qualification slice for the Meraki work trial."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.116.1",
+    "psycopg[binary]==3.2.9",
+    "pydantic-settings==2.10.1",
+    "uvicorn[standard]==0.35.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx==0.28.1",
+    "pytest==8.4.1",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

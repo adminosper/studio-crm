@@ -389,9 +389,300 @@ A unified state machine table for AI generated emails, tracking from draft queue
 | `sent_at` | timestamp | |
 | `created_at` | timestamp | |
 
+
+---
+
+## Entity Relationship Diagram
+
+```mermaid
+erDiagram
+    Tenant {
+        UUID tenant_id PK
+        string name
+        string posthog_org_id
+        string posthog_project_id
+        string posthog_project_api_key
+        integer mql_score_threshold
+        integer sql_score_threshold
+        timestamp created_at
+        timestamp deleted_at
+    }
+
+    User {
+        UUID user_id PK
+        UUID tenant_id FK
+        string email
+        string password_hash
+        enum role
+        enum status
+        timestamp created_at
+        timestamp deleted_at
+    }
+
+    ActivationToken {
+        UUID token_id PK
+        UUID user_id FK
+        string token
+        timestamp expires_at
+        timestamp used_at
+        timestamp created_at
+    }
+
+    Account {
+        UUID account_id PK
+        UUID tenant_id FK
+        string name
+        string industry
+        string website
+        integer employee_count
+        enum status
+        timestamp created_at
+        timestamp updated_at
+        timestamp deleted_at
+    }
+
+    Contact {
+        UUID contact_id PK
+        UUID tenant_id FK
+        UUID account_id FK
+        string first_name
+        string last_name
+        string email
+        string phone
+        string job_title
+        timestamp created_at
+        timestamp updated_at
+        timestamp deleted_at
+    }
+
+    Lead {
+        UUID lead_id PK
+        UUID tenant_id FK
+        string name
+        string email
+        string company
+        string industry
+        integer company_size
+        string geography
+        string phone
+        string title
+        enum source
+        text notes
+        enum status
+        enum stage
+        integer score
+        timestamp score_last_updated_at
+        boolean is_stage_manually_overridden
+        UUID owner_user_id FK
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    LeadTriggerRule {
+        UUID rule_id PK
+        UUID tenant_id FK
+        enum source_type
+        string event_name
+        JSONB property_filters
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    ICPProfile {
+        UUID icp_id PK
+        UUID tenant_id FK
+        string_array target_industries
+        string_array target_geographies
+        integer company_size_min
+        integer company_size_max
+        string_array target_job_titles
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    LeadScoringRule {
+        UUID rule_id PK
+        UUID tenant_id FK
+        enum rule_type
+        integer score_delta
+        boolean is_active
+        JSONB rule_config
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    DealPipelineStage {
+        UUID stage_id PK
+        UUID tenant_id FK
+        string name
+        integer position
+        integer probability
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    Deal {
+        UUID deal_id PK
+        UUID tenant_id FK
+        string name
+        decimal amount
+        UUID stage_id FK
+        date expected_close_date
+        UUID account_id FK
+        UUID contact_id FK
+        UUID owner_user_id FK
+        timestamp created_at
+        timestamp updated_at
+        timestamp deleted_at
+    }
+
+    StaticEmailTemplate {
+        UUID template_id PK
+        UUID tenant_id FK
+        string name
+        string subject
+        text body_html
+        text body_text
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    StaticOutboundSequence {
+        UUID sequence_id PK
+        UUID tenant_id FK
+        string name
+        enum trigger_type
+        string trigger_event_name
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    StaticOutboundStep {
+        UUID step_id PK
+        UUID sequence_id FK
+        UUID tenant_id FK
+        integer position
+        UUID template_id FK
+        integer delay_days
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    StaticOutboundEnrollment {
+        UUID enrollment_id PK
+        UUID tenant_id FK
+        UUID lead_id FK
+        UUID sequence_id FK
+        integer current_step_position
+        timestamp next_step_due_at
+        enum status
+        timestamp enrolled_at
+        timestamp updated_at
+    }
+
+    StaticOutboundEmail {
+        UUID email_id PK
+        UUID tenant_id FK
+        UUID enrollment_id FK
+        UUID step_id FK
+        UUID lead_id FK
+        string subject
+        text body_html
+        enum status
+        timestamp sent_at
+        timestamp created_at
+    }
+
+    AIPromptConfiguration {
+        UUID config_id PK
+        UUID tenant_id FK
+        boolean is_system_default
+        text base_instructions
+        text brand_guidelines
+        text product_description
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    AIOutboundSequence {
+        UUID sequence_id PK
+        UUID tenant_id FK
+        string name
+        enum trigger_type
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    AIOutboundStep {
+        UUID step_id PK
+        UUID sequence_id FK
+        integer position
+        integer delay_days
+    }
+
+    AIOutboundEnrollment {
+        UUID enrollment_id PK
+        UUID tenant_id FK
+        UUID lead_id FK
+        UUID sequence_id FK
+        integer current_step_position
+        timestamp next_step_due_at
+        enum status
+        timestamp enrolled_at
+        timestamp updated_at
+    }
+
+    AIOutboundEmail {
+        UUID email_id PK
+        UUID tenant_id FK
+        UUID enrollment_id FK
+        UUID lead_id FK
+        string subject
+        text body_html
+        enum status
+        UUID reviewed_by_user_id FK
+        timestamp reviewed_at
+        timestamp sent_at
+        timestamp created_at
+    }
+
+    Tenant ||--o{ User : "has"
+    Tenant ||--|| ICPProfile : "has"
+    Tenant ||--o{ LeadTriggerRule : "defines"
+    Tenant ||--o{ LeadScoringRule : "defines"
+    Tenant ||--o{ Lead : "owns"
+    Tenant ||--o{ Account : "owns"
+    Tenant ||--o{ Contact : "owns"
+    Tenant ||--o{ DealPipelineStage : "defines"
+    Tenant ||--o{ Deal : "owns"
+    Account ||--o{ Contact : "has"
+    Account ||--o{ Deal : "has"
+    DealPipelineStage ||--o{ Deal : "contains"
+    User ||--o{ ActivationToken : "receives"
+    Tenant ||--o{ StaticEmailTemplate : "owns"
+    Tenant ||--o{ StaticOutboundSequence : "defines"
+    StaticOutboundSequence ||--o{ StaticOutboundStep : "contains"
+    StaticOutboundStep }o--|| StaticEmailTemplate : "uses"
+    Lead ||--o{ StaticOutboundEnrollment : "enrolled_in"
+    StaticOutboundEnrollment }o--|| StaticOutboundSequence : "targets"
+    StaticOutboundEnrollment ||--o{ StaticOutboundEmail : "sends"
+    StaticOutboundEmail }o--|| StaticOutboundStep : "sent_from"
+
+    Tenant ||--o{ AIPromptConfiguration : "defines"
+    Tenant ||--o{ AIOutboundSequence : "defines"
+    AIOutboundSequence ||--o{ AIOutboundStep : "contains"
+    Lead ||--o{ AIOutboundEnrollment : "enrolled_in"
+    AIOutboundEnrollment }o--|| AIOutboundSequence : "targets"
+    AIOutboundEnrollment ||--o{ AIOutboundEmail : "sends"
+```
+
 ---
 
 ## Relationships Summary
+
 
 ```
 Tenant 1──* User
