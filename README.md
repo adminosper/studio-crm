@@ -2,31 +2,31 @@
 
 This repository implements the **Lead Scoring and Qualification** slice from the Venture-Studio CRM work trial. The platform is designed to serve multiple startups under one studio, providing event-driven lead lifecycle tracking, automated outbound triggers, and marketing attribution dashboards, all while enforcing absolute multi-tenant data isolation.
 
-To understand the core CRM domain concepts and the terminologies used for B2B SaaS tracking (such as Leads, Accounts, Contacts, Deals, and the conversion lifecycle), please refer to the **[Domain Knowledge Doc](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/domain/domain-knowledge.md)**.
+To understand the core CRM domain concepts and the terminologies used for B2B SaaS tracking (such as Leads, Accounts, Contacts, Deals, and the conversion lifecycle), please refer to the **[Domain Knowledge Doc](documentations/domain/domain-knowledge.md)**.
 
 ---
 
 ## 📖 Documentation Directory
 
 ### 🏆 Required Deliverables
-* **[Systems Design Document (SYSTEMS_DESIGN.md)](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/SYSTEMS_DESIGN.md):** The primary required systems design document summarizing architecture diagrams, data models, RLS context isolation, trade-offs, and scaling limits.
-* **[AI Build Log Summary](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/transcripts/AI_BUILD_LOG_SUMMARY.md):** Detailed retrospective on the human-AI collaborative process, including rules enforcement (`AGENTS.md`) and course corrections.
+* **[Systems Design Document (SYSTEMS_DESIGN.md)](SYSTEMS_DESIGN.md):** The primary required systems design document summarizing architecture diagrams, data models, RLS context isolation, trade-offs, and scaling limits.
+* **[AI Build Log Summary](transcripts/AI_BUILD_LOG_SUMMARY.md):** Detailed retrospective on the human-AI collaborative process, including rules enforcement (`AGENTS.md`) and course corrections.
 
 ### 1. Product & Domain Specs
-* **[Domain Knowledge](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/domain/domain-knowledge.md):** Glossary of CRM entities and lifecycle flow.
-* **[Product Requirements Document (PRD)](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/product/prd.md):** Complete requirements, scale assumptions, release phases, and functional scenarios.
-* **[Problem Breakdown](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/product/problem-breakdown.txt):** Core subproblems mapped to Tenant-Level vs. Studio-Level scopes.
+* **[Domain Knowledge](documentations/domain/domain-knowledge.md):** Glossary of CRM entities and lifecycle flow.
+* **[Product Requirements Document (PRD)](documentations/product/prd.md):** Complete requirements, scale assumptions, release phases, and functional scenarios.
+* **[Problem Breakdown](documentations/product/problem-breakdown.txt):** Core subproblems mapped to Tenant-Level vs. Studio-Level scopes.
 
 ### 2. Architecture & Design
-* **[System Architecture](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/architecture.md):** High-level container diagram, webhook data pipeline, and scaling thresholds.
-* **[Data Model & ER Diagram](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/data-model.md):** SQL schema details and Mermaid Entity-Relationship diagram.
-* **[User Flows & Sequences](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/user-flows.md):** Mermaid sequence diagrams for studio bootstrapping, onboarding, scoring, and outbound triggers.
+* **[System Architecture](documentations/architecture/architecture.md):** High-level container diagram, webhook data pipeline, and scaling thresholds.
+* **[Data Model & ER Diagram](documentations/architecture/data-model.md):** SQL schema details and Mermaid Entity-Relationship diagram.
+* **[User Flows & Sequences](documentations/architecture/user-flows.md):** Mermaid sequence diagrams for studio bootstrapping, onboarding, scoring, and outbound triggers.
 
 ### 3. Decisions & Implementation Plan
-* **[Design Decisions](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/decisions.md):** Core architectural choices (PostgreSQL RLS database design, PgBouncer transaction scopes, RBAC models).
-* **[Lead Scoring Implementation Plan](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/product/lead-scoring-implementation-plan.md):** Scope boundaries, seed data design, core APIs, and worker mocks for this working submodule prototype.
-* **[Lead Scoring Rule Contracts](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/lead-scoring-rule-contracts.md):** Rule contract specifications, JSONB schemas, operators, and validation criteria.
-* **[Lead Scoring Prototype Decisions](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/lead-scoring-prototype-decisions.md):** Implementation-specific decisions for the working API prototype (e.g. mocked PostHog events, open property filters).
+* **[Design Decisions](documentations/decisions/decisions.md):** Core architectural choices (PostgreSQL RLS database design, PgBouncer transaction scopes, RBAC models).
+* **[Lead Scoring Implementation Plan](documentations/product/lead-scoring-implementation-plan.md):** Scope boundaries, seed data design, core APIs, and worker mocks for this working submodule prototype.
+* **[Lead Scoring Rule Contracts](documentations/architecture/lead-scoring-rule-contracts.md):** Rule contract specifications, JSONB schemas, operators, and validation criteria.
+* **[Lead Scoring Prototype Decisions](documentations/decisions/lead-scoring-prototype-decisions.md):** Implementation-specific decisions for the working API prototype (e.g. mocked PostHog events, open property filters).
 
 ---
 
@@ -73,7 +73,7 @@ To run and test this system locally, you only need:
    docker compose down -v
    docker compose up --build -d
    ```
-   *Note: This spins up a PostgreSQL database and a FastAPI backend (`http://localhost:8000`). The database is automatically seeded with tenants, leads, scoring rules, and mock PostHog behavioral events via [seed.sql](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/app/db/seed.sql).*
+   *Note: This spins up a PostgreSQL database and a FastAPI backend (`http://localhost:8000`). The database is automatically seeded with tenants, leads, scoring rules, and mock PostHog behavioral events via [seed.sql](app/db/seed.sql).*
 
 4. **Verify the API is running**:
    Open [http://localhost:8000/docs](http://localhost:8000/docs) in your browser to access the interactive Swagger API documentation.

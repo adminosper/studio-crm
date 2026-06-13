@@ -8,10 +8,10 @@ This document serves as the primary systems design deliverable for the Venture-S
 
 The CRM platform is structured to support real-time user interactions, asynchronous webhook integrations, and background scoring/marketing automation workloads.
 
-*   **Architecture Blueprint:** The complete system architecture, container layers (Client Layer, External Layer, API Service, Ingestion Receiver, Workers, Schedulers), and service interactions are detailed in **[System Architecture (architecture.md)](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/architecture.md)**.
+*   **Architecture Blueprint:** The complete system architecture, container layers (Client Layer, External Layer, API Service, Ingestion Receiver, Workers, Schedulers), and service interactions are detailed in **[System Architecture (architecture.md)](documentations/architecture/architecture.md)**.
 *   **Visual Diagrams:** Refer directly to:
-    - **[Container Diagram (Clean View)](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/architecture.md#container-diagram-clean-view):** High-level view showing domain-grouped nodes and collapsed data paths.
-    - **[Container Diagram (Detailed View)](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/architecture.md#container-diagram-detailed-view):** Detailed layout showing internal API submodules, queues, databases, and cron schedules.
+    - **[Container Diagram (Clean View)](documentations/architecture/architecture.md#container-diagram-clean-view):** High-level view showing domain-grouped nodes and collapsed data paths.
+    - **[Container Diagram (Detailed View)](documentations/architecture/architecture.md#container-diagram-detailed-view):** Detailed layout showing internal API submodules, queues, databases, and cron schedules.
 
 ---
 
@@ -19,8 +19,8 @@ The CRM platform is structured to support real-time user interactions, asynchron
 
 The platform maps B2B CRM structures (Leads, Accounts, Contacts, Deals) with Lead Scoring Rules, AI Prompt Configurations, and Outbound Email logs.
 
-*   **ER Diagram & Specs:** The full database schema, indexes, field types, and notes are documented in **[Data Model (data-model.md)](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/data-model.md)**.
-*   **Visual ER Diagram:** Refer to the **[Mermaid Entity-Relationship Diagram](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/data-model.md#entity-relationship-diagram)** showing all 21 entities and their explicit 26 relationships.
+*   **ER Diagram & Specs:** The full database schema, indexes, field types, and notes are documented in **[Data Model (data-model.md)](documentations/architecture/data-model.md)**.
+*   **Visual ER Diagram:** Refer to the **[Mermaid Entity-Relationship Diagram](documentations/architecture/data-model.md#entity-relationship-diagram)** showing all 21 entities and their explicit 26 relationships.
 
 ---
 
@@ -35,7 +35,7 @@ Under the Venture-Studio model, competitor startups share the same CRM database.
     ```
     The `SET LOCAL` command restricts the configuration value strictly to the active transaction block. Once the transaction commits or aborts, PostgreSQL automatically resets the setting, preventing context leakage to subsequent requests using the same connection.
 *   **Tracking Isolation:** To prevent cross-startup data leaks in user tracking, the platform provisions a dedicated PostHog Organization and Project for each tenant startup. Webhook posts carry the unique PostHog project ID, which the CRM maps to the local tenant ID.
-*   **Detailed RLS Policies:** For the full role definition matrix and database configuration code, refer to **[Design Decisions - Section 2 (decisions.md)](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/decisions.md#2-multi-tenancy-isolation-strategy)**.
+*   **Detailed RLS Policies:** For the full role definition matrix and database configuration code, refer to **[Design Decisions - Section 2 (decisions.md)](documentations/decisions/decisions.md#2-multi-tenancy-isolation-strategy)**.
 
 ---
 

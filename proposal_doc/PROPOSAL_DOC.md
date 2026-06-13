@@ -18,7 +18,7 @@ The central technical challenge is **strict multi-tenant isolation** on a shared
 ---
 ## 2. Phased Implementation Roadmap
 
-*(Note: If I had to implement this multi-tenant CRM, this would be the rough high-level planning. All detailed functional specifications, scenarios, and sequence diagrams for these stages are fully documented in the [Product Requirements Document (prd.md)](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/product/prd.md).)*
+*(Note: If I had to implement this multi-tenant CRM, this would be the rough high-level planning. All detailed functional specifications, scenarios, and sequence diagrams for these stages are fully documented in the [Product Requirements Document (prd.md)](../documentations/product/prd.md).)*
 
 To deliver value quickly while minimizing architectural risk, I propose a 4-phase rollout plan. The implementation order is structured around dependencies:
 
@@ -89,7 +89,7 @@ If granted two additional weeks of engineering effort, I would write the complet
     *   Build a dedicated pipeline to parse and preprocess incoming event payloads. Because telemetry events captured by PostHog are generally low-level data points (such as raw DOM interactions, clicks, and page views) rather than straightforward high-level milestones (like "Demo Requested"), this layer is required to preprocess and translate raw events into structured inputs before they can be evaluated by the rule engine.
 
 ### 3.3 Scalability Beyond 100k Users
-*(Note: For scaling the platform to 100k+ active users across multiple startup tenants, certain architectural components such as database connection pools, read-replica aggregations, background queue workers, and PostHog ClickHouse replications will need to evolve. These scaling revisits and detailed paths are fully documented in the [Systems Design Doc (SYSTEMS_DESIGN.md)](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/SYSTEMS_DESIGN.md) and the [Product Requirements Document (prd.md)](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/product/prd.md).)*
+*(Note: For scaling the platform to 100k+ active users across multiple startup tenants, certain architectural components such as database connection pools, read-replica aggregations, background queue workers, and PostHog ClickHouse replications will need to evolve. These scaling revisits and detailed paths are fully documented in the [Systems Design Doc (SYSTEMS_DESIGN.md)](../SYSTEMS_DESIGN.md) and the [Product Requirements Document (prd.md)](../documentations/product/prd.md).)*
 
 #### Scale Envelope Assumptions
 *   Startups (Tenants): **100**

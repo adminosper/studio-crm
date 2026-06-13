@@ -118,7 +118,7 @@ A raw, unqualified prospect captured either manually or via automated events.
 | `created_at` | timestamp | |
 | `updated_at` | timestamp | |
 
-> **Note:** Leads cannot be soft-deleted in V1. Use `status = disqualified` to freeze a lead. See [Decision 9](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/decisions.md#9-lead-records-are-not-deletable-in-v1).
+> **Note:** Leads cannot be soft-deleted in V1. Use `status = disqualified` to freeze a lead. See [Decision 9](../../documentations/decisions/decisions.md#9-lead-records-are-not-deletable-in-v1).
 
 ---
 
@@ -715,4 +715,4 @@ AIOutboundEnrollment *──1 AIOutboundSequence
 AIOutboundEnrollment 1──* AIOutboundEmail
 ```
 
-> **Note:** All tenant-scoped tables include `tenant_id` and are protected by PostgreSQL Row-Level Security (RLS). See [decisions.md](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/decisions.md#2-multi-tenancy-isolation-strategy) for the isolation strategy.
+> **Note:** All tenant-scoped tables include `tenant_id` and are protected by PostgreSQL Row-Level Security (RLS). See [decisions.md](../../documentations/decisions/decisions.md#2-multi-tenancy-isolation-strategy) for the isolation strategy.

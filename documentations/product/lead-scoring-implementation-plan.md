@@ -125,7 +125,7 @@ We will support two rule types.
 
 Rules based on lead attributes already stored in the database.
 
-Detailed contract and compatibility rules live in [lead-scoring-rule-contracts.md](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/lead-scoring-rule-contracts.md).
+Detailed contract and compatibility rules live in [lead-scoring-rule-contracts.md](../../documentations/architecture/lead-scoring-rule-contracts.md).
 
 Allowed lead fields:
 
@@ -149,7 +149,7 @@ Supported operators:
 
 Rules based on mock event aggregates for a lead.
 
-Detailed contract and compatibility rules live in [lead-scoring-rule-contracts.md](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/lead-scoring-rule-contracts.md).
+Detailed contract and compatibility rules live in [lead-scoring-rule-contracts.md](../../documentations/architecture/lead-scoring-rule-contracts.md).
 
 Supported event aggregate logic:
 

@@ -103,7 +103,7 @@ The following features are deferred from the primary system design blueprint.
 
 These constraints apply globally across all functionalities, tables, and services scoped under a startup workspace (Leads, Deals, Accounts, Contacts, etc.):
 
-- **Strict Isolation:** Enforced via primary app-level scoping (`WHERE tenant_id = ?`) and PostgreSQL RLS as described in the [Multi-Tenancy Isolation Strategy](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/decisions.md#2-multi-tenancy-isolation-strategy).
+- **Strict Isolation:** Enforced via primary app-level scoping (`WHERE tenant_id = ?`) and PostgreSQL RLS as described in the [Multi-Tenancy Isolation Strategy](../../documentations/decisions/decisions.md#2-multi-tenancy-isolation-strategy).
 - **Data Deletions:** All standard resource mutations use soft-deletes (setting a `deleted_at` timestamp) to prevent permanent accidental data loss.
 - **Per-Tenant Uniqueness:** Unique indexes (such as email uniqueness) are enforced *per tenant* rather than globally. For example, `lead@example.com` can exist in Startup A and Startup B independently.
 
@@ -145,7 +145,7 @@ Before diving into detailed specifications, this summary outlines the core opera
 
 This scenario covers two sequential phases: studio-level setup (performed once by the Super Admin before any tenant is provisioned) and tenant provisioning (repeated for each new startup added to the portfolio).
 
-> **RBAC Reference:** All access rules in this section derive from the combined identity role + active workspace context model. Refer to [Decision 6: RBAC Model](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/decisions.md#6-role-based-access-control-rbac-model) for the full permission matrix and DB role derivation.
+> **RBAC Reference:** All access rules in this section derive from the combined identity role + active workspace context model. Refer to [Decision 6: RBAC Model](../../documentations/decisions/decisions.md#6-role-based-access-control-rbac-model) for the full permission matrix and DB role derivation.
 
 ---
 
@@ -184,8 +184,8 @@ Performed for each new startup added to the portfolio.
 - **Token Validity:** Activation tokens must be single-use and expire after their configured duration. Clicking an expired or used token must display a clear validation error with an option to request a new link from the inviter.
 
 #### Related Diagrams
-- For the step-by-step sequence diagram of the initial workspace creation flow, refer to [1. Initial Tenant Registration & Delegation Flow](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/user-flows.md#1-initial-tenant-registration--delegation-flow).
-- For the step-by-step sequence diagram of the onboarding and configuration flow, refer to [2. Tenant Initial Setup & Onboarding Flow](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/user-flows.md#2-tenant-initial-setup--onboarding-flow).
+- For the step-by-step sequence diagram of the initial workspace creation flow, refer to [1. Initial Tenant Registration & Delegation Flow](../../documentations/architecture/user-flows.md#1-initial-tenant-registration--delegation-flow).
+- For the step-by-step sequence diagram of the onboarding and configuration flow, refer to [2. Tenant Initial Setup & Onboarding Flow](../../documentations/architecture/user-flows.md#2-tenant-initial-setup--onboarding-flow).
 
 
 ---
@@ -203,8 +203,8 @@ All operations are scoped to the authenticated user's tenant. Standard CRUD is e
 - **List / Read:** Startup members can view their tenant's lead records only. Supports filtering by status, stage, source, owner, and date range.
 - **Manual Create:** Permitted users create a lead by providing: Name, Email, Company, Industry, Company Size, Geography, Source, Phone, Title, Notes. Email is mandatory and must be unique per tenant.
 - **Update:** Permitted users can edit any lead field (including `status = disqualified` to freeze a lead). All mutations are timestamped.
-- **No Deletion (V1):** Leads cannot be deleted. Setting `status = disqualified` is the only way to remove a lead from active workflows. See [Decision 9](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/decisions.md#9-lead-records-are-not-deletable-in-v1) for rationale.
-- **Authorization:** Role-based. Sales Reps can create/update their own leads. Tenant Admins and Growth Marketers have broader access. Refer to [Multi-Tenancy Isolation Strategy](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/decisions.md#2-multi-tenancy-isolation-strategy) for role-level enforcement. (Can be taken in v2)
+- **No Deletion (V1):** Leads cannot be deleted. Setting `status = disqualified` is the only way to remove a lead from active workflows. See [Decision 9](../../documentations/decisions/decisions.md#9-lead-records-are-not-deletable-in-v1) for rationale.
+- **Authorization:** Role-based. Sales Reps can create/update their own leads. Tenant Admins and Growth Marketers have broader access. Refer to [Multi-Tenancy Isolation Strategy](../../documentations/decisions/decisions.md#2-multi-tenancy-isolation-strategy) for role-level enforcement. (Can be taken in v2)
 
 ---
 
@@ -344,7 +344,7 @@ This scenario outlines the rules, templates, and AI orchestration parameters use
     *   **Soft Stop (Replies):** In V2, an ESP reply webhook will update the status to `paused_replied` for manual review by sales reps. In V1, reply handling is deferred.
     *   **Opt-Out (Unsubscribes):** In V1, the system relies entirely on the ESP's built-in suppression list to drop emails to unsubscribed addresses at the delivery layer; the CRM does not update enrollment state or record unsubscribe flags in V1 (deferred to V2).
 *   **Workflow Reference:**
-    *   For a complete visualization of this execution lifecycle, refer to [3. Pre-MQL Outbound Execution Flow](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/user-flows.md#3-pre-mql-outbound-execution-flow) in `user-flows.md`.
+    *   For a complete visualization of this execution lifecycle, refer to [3. Pre-MQL Outbound Execution Flow](../../documentations/architecture/user-flows.md#3-pre-mql-outbound-execution-flow) in `user-flows.md`.
 
 #### 2. MQL Outbound (AI-Assisted Drafts)
 - **Triggers:** Transitions into the MQL status (`mql_promoted`).

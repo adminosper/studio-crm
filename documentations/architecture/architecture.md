@@ -255,7 +255,7 @@ flowchart TB
 - **API Service and Async Layer are separate deployable units.** They share domain logic but scale independently — API scales with user request rate, Workers scale with queue depth.
 - **One shared Webhook Receiver endpoint** handles events from all tenants. Tenant is resolved inside each job using the PostHog `project_id` → `tenant_id` DB lookup.
 - **PostHog is configured per-tenant** (separate Org + Project + Webhook Destination), ensuring native event isolation without shared-schema filtering tricks.
-- **PostgreSQL RLS** enforces data isolation at the DB level as a safety net. See [decisions.md](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/decisions.md).
+- **PostgreSQL RLS** enforces data isolation at the DB level as a safety net. See [decisions.md](../../documentations/decisions/decisions.md).
 - **PgBouncer** sits in front of PostgreSQL to multiplex connections from multiple API and Worker instances at scale.
 - **Studio Bootstrap hard-gates tenant creation.** The `AIPromptConfiguration` system-default row (`is_system_default = true`) must exist before any tenant workspace can be provisioned. This is enforced at the API layer and guaranteed by the forced onboarding checklist on first Super Admin login.
 - **Dual-context JWT model for Super Admins.** A Super Admin's `identity_role` is fixed in the user record. The `active_workspace_context` (studio or a specific `tenant_id`) is updated in the JWT when the tenant switcher is used. This allows the API to enforce the correct permission set (read-only rollup vs. full tenant-admin CRUD) without altering the user's identity.
