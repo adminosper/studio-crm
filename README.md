@@ -1,16 +1,36 @@
-# Meraki Lead Scoring API
+# Venture-Studio CRM (Multi-Tenant Growth Engine)
 
-This repository implements the **Lead Scoring and Qualification** slice from the Meraki full stack engineer work trial.
+This repository implements the **Lead Scoring and Qualification** slice from the Venture-Studio CRM work trial. The platform is designed to serve multiple startups under one studio, providing event-driven lead lifecycle tracking, automated outbound triggers, and marketing attribution dashboards, all while enforcing absolute multi-tenant data isolation.
 
-Current status:
+To understand the core CRM domain concepts and the terminologies used for B2B SaaS tracking (such as Leads, Accounts, Contacts, Deals, and the conversion lifecycle), please refer to the **[Domain Knowledge Doc](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/domain/domain-knowledge.md)**.
 
-- milestone 1 complete
-- FastAPI backend bootstrapped
-- PostgreSQL schema initialized by the Postgres container
-- demo seed data inserted by Postgres init scripts
-- health endpoint available
+---
 
-## Run
+## 📖 Documentation Directory
+
+Refer to the following documents for design, architecture, and product decisions:
+
+### 1. Product & Domain Specs
+* **[Domain Knowledge](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/domain/domain-knowledge.md):** Glossary of CRM entities and lifecycle flow.
+* **[Product Requirements Document (PRD)](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/product/prd.md):** Complete requirements, scale assumptions, release phases, and functional scenarios.
+* **[Problem Breakdown](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/product/problem-breakdown.txt):** Core subproblems mapped to Tenant-Level vs. Studio-Level scopes.
+
+### 2. Architecture & Design
+* **[System Architecture](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/architecture.md):** High-level container diagram, webhook data pipeline, and scaling thresholds.
+* **[Data Model & ER Diagram](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/data-model.md):** SQL schema details and Mermaid Entity-Relationship diagram.
+* **[User Flows & Sequences](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/user-flows.md):** Mermaid sequence diagrams for studio bootstrapping, onboarding, scoring, and outbound triggers.
+
+### 3. Decisions & Implementation Plan
+* **[Design Decisions](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/decisions.md):** Core architectural choices (PostgreSQL RLS database design, PgBouncer transaction scopes, RBAC models).
+* **[Lead Scoring Implementation Plan](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/product/lead-scoring-implementation-plan.md):** Scope boundaries, seed data design, core APIs, and worker mocks for this working submodule prototype.
+* **[Lead Scoring Rule Contracts](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/architecture/lead-scoring-rule-contracts.md):** Rule contract specifications, JSONB schemas, operators, and validation criteria.
+* **[Lead Scoring Prototype Decisions](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/lead-scoring-prototype-decisions.md):** Implementation-specific decisions for the working API prototype (e.g. mocked PostHog events, open property filters).
+
+---
+
+## 🚀 Run the Prototype
+
+The runnable FastAPI backend module lives in `app/`. The PostgreSQL database schema and seed data are initialized automatically during container setup.
 
 ```bash
 cd app
@@ -18,47 +38,46 @@ cp .env.example .env
 docker compose up --build
 ```
 
-The runnable FastAPI module lives in `app/`.
-The reviewer seed data is created by PostgreSQL during container initialization.
+---
 
-## Inspect Seed Data
+## 🔍 Inspect Seed Data
 
-There is intentionally no tenant-listing helper endpoint in the API surface. Tenant isolation is central to this slice, so seeded tenant and lead inspection should happen through the seed file or through `psql`.
+Tenant isolation is central to this prototype, so there is intentionally no public "list all tenants" API endpoint. You can inspect the seeded tenant and lead information directly through the seed source or through `psql`.
 
-Seed source:
+* **Seed Source file:** [app/db/seed.sql](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/app/db/seed.sql)
 
-- [app/db/seed.sql](/Users/shagunarora/work-in-progress/meraki-labs-assignment/app/db/seed.sql)
-
-Open a Postgres shell:
-
+### Open a Postgres Shell
 ```bash
 cd app
 docker exec -it meraki_lead_scoring-postgres-1 psql -U meraki -d meraki_lead_scoring
 ```
 
-Useful queries:
-
+### Useful Inspection Queries
 ```sql
-SELECT id, name, mql_score_threshold, sql_score_threshold
+-- View seeded tenants and scoring thresholds
+SELECT id, name, mql_score_threshold, sql_score_threshold 
 FROM tenants;
 
-SELECT id, tenant_id, name, email, stage, score, status
-FROM leads
+-- View seeded leads and their qualification states
+SELECT id, tenant_id, name, email, stage, score, status 
+FROM leads 
 ORDER BY created_at;
 
-SELECT id, tenant_id, rule_name, rule_type, score_delta, is_active
-FROM lead_scoring_rules
+-- View seeded scoring rules
+SELECT id, tenant_id, rule_name, rule_type, score_delta, is_active 
+FROM lead_scoring_rules 
 ORDER BY created_at;
 ```
 
-## Verify
+---
 
+## 🧪 Verify & Re-Seed
+
+### Verify API Health
 ```bash
 curl http://localhost:8000/health
 ```
-
-Expected response:
-
+**Expected Response:**
 ```json
 {
   "status": "ok",
@@ -66,28 +85,10 @@ Expected response:
 }
 ```
 
-## Re-seed Demo Data
-
-PostgreSQL init scripts run only when the database volume is created for the first time.
-
-To rebuild the demo database from scratch:
-
+### Re-seed Demo Data
+PostgreSQL initialization scripts run only when the database volume is created for the first time. To rebuild and re-seed the database:
 ```bash
 cd app
 docker compose down -v
 docker compose up --build
 ```
-
-Later milestones will add the scoring APIs, helper APIs, and the qualification engine.
-
-## Prototype Decisions
-
-For the lead-scoring slice, some reviewer-facing behavior is intentionally mocked in code for speed:
-
-- Behavioral scoring rule `event_name` validation uses a code-defined mock PostHog event catalog.
-- The allowed event names are returned by the scoring-rule contract API, so reviewers can discover them before inserting rules.
-- `property_filters` are accepted as open JSON objects in V1; a mocked property catalog is intentionally deferred.
-
-Reference:
-
-- [documentations/decisions/lead-scoring-prototype-decisions.md](/Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/lead-scoring-prototype-decisions.md)

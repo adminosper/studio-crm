@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from psycopg import Connection
@@ -69,3 +70,34 @@ class LeadRepository:
         with self._connection.cursor() as cursor:
             cursor.execute(query, {"tenant_id": tenant_id, "lead_id": lead_id})
             return cursor.fetchone()
+
+    def update_scoring_state(
+        self,
+        *,
+        tenant_id: UUID,
+        lead_id: UUID,
+        score: int,
+        stage: str,
+        score_last_updated_at: datetime,
+    ) -> None:
+        """Persist one lead scoring update inside a caller-managed transaction."""
+        query = """
+            UPDATE leads
+            SET
+                score = %(score)s,
+                stage = %(stage)s,
+                score_last_updated_at = %(score_last_updated_at)s,
+                updated_at = NOW()
+            WHERE tenant_id = %(tenant_id)s AND id = %(lead_id)s
+        """
+        with self._connection.cursor() as cursor:
+            cursor.execute(
+                query,
+                {
+                    "tenant_id": tenant_id,
+                    "lead_id": lead_id,
+                    "score": score,
+                    "stage": stage,
+                    "score_last_updated_at": score_last_updated_at,
+                },
+            )

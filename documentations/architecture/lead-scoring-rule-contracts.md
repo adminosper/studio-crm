@@ -87,6 +87,28 @@ It means:
 
 So the system supports **configurable rules**, not **arbitrary rule design**.
 
+## 3.1 Rule Score Budget Semantics In V1
+
+Each rule carries a configured score value through `score_delta`.
+
+For this prototype:
+
+- rule create/update is **not** rejected when the sum of active tenant rule scores exceeds `100`
+- instead, final computed lead scores are normalized during score computation
+
+Normalization rule:
+
+- if the sum of active positive tenant rule scores is `<= 100`, final lead score is the raw matched-rule sum
+- if the sum of active positive tenant rule scores is `> 100`, final lead score is normalized proportionally into the `0..100` range
+
+Current formula:
+
+```text
+final_score = round((raw_score / max_possible_score) * 100)
+```
+
+This note is important for rule insertion because a tenant can configure more than `100` total active rule points, but the stored lead score remains bounded to `0..100`.
+
 ---
 
 ## 4. Fit Rule Contract

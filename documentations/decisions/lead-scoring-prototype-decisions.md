@@ -46,3 +46,45 @@ These are intentionally separate from [decisions.md](/Users/shagunarora/work-in-
   - validation checks that `property_filters`, when provided, is an object
   - there is no allowlist of property names or value enums yet
 - **Deferred from V1:** A PostHog-backed property catalog or a mocked property schema per event type.
+
+---
+
+## 4. Tenant Score Computation Runs Sequentially In V1
+
+- **Decision:** Tenant lead score computation is executed sequentially in this prototype.
+- **Why:**
+  - reviewer-scale data is small
+  - the implementation stays easier to reason about and debug
+  - concurrency adds complexity without changing the demonstration value of the slice
+- **Current implementation:**
+  - one request computes all leads for one tenant
+  - lead processing is synchronous and in-order
+- **Deferred from V1:** Parallel lead computation.
+
+---
+
+## 5. Tenant Score Computation Uses One Database Transaction
+
+- **Decision:** The tenant scoring compute flow persists all lead score updates inside one transaction.
+- **Why:**
+  - the reviewer should not see partially applied score updates for one tenant run
+  - if computation fails midway, the tenant state should roll back cleanly
+- **Current implementation:**
+  - `POST /api/core/tenants/{tenant_id}/scoring/compute` opens one transaction
+  - all score and stage writes for that request participate in the same transaction
+- **Deferred from V1:** Partial progress tracking or resumable compute runs.
+
+---
+
+## 6. Scores Are Proportionally Normalized When Tenant Score Budget Exceeds 100
+
+- **Decision:** If the sum of active positive tenant rule deltas exceeds `100`, final lead scores are proportionally normalized into the `0..100` range.
+- **Why:**
+  - this preserves relative ranking between leads
+  - it avoids hard-clamping multiple distinct raw scores to `100`
+  - it keeps rule configuration flexible for the prototype
+- **Current implementation:**
+  - raw score is computed additively from matched fit and behavior rules
+  - positive active rule deltas define the tenant max possible score budget
+  - if that budget exceeds `100`, final score is `round((raw_score / max_possible_score) * 100)` and then clamped into `0..100`
+- **Deferred from V1:** A stricter rule-budget validation policy at rule creation/update time.

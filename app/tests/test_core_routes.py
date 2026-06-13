@@ -6,9 +6,10 @@ from fastapi.testclient import TestClient
 
 from src.main import app
 from src.services.lead_scoring_rules.contracts.service import ScoringRuleContractService
+from src.shared.dependencies import get_lead_scoring_compute_service
 from src.shared.dependencies import get_lead_scoring_rule_service
-from src.shared.dependencies import get_scoring_rule_contract_service
 from src.shared.dependencies import get_lead_service
+from src.shared.dependencies import get_scoring_rule_contract_service
 from src.shared.dependencies import get_tenant_service
 from src.shared.exceptions import LeadNotFoundError
 from src.shared.exceptions import RuleConfigValidationError
@@ -84,6 +85,19 @@ class StubScoringRuleService:
         if self._missing is not None:
             raise self._missing
         return None
+
+
+class StubScoringComputeService:
+    """Small stub for scoring compute route tests."""
+
+    def __init__(self, result: dict | None = None, missing: Exception | None = None) -> None:
+        self._result = result or {}
+        self._missing = missing
+
+    def compute_tenant_scores(self, tenant_id):
+        if self._missing is not None:
+            raise self._missing
+        return self._result
 
 
 def _sample_tenant() -> dict:
@@ -272,3 +286,56 @@ def test_delete_scoring_rule_returns_not_found_when_service_raises():
 
     assert response.status_code == 404
     assert response.json()["detail"] == "scoring rule not found"
+
+
+def test_compute_tenant_scores_returns_summary():
+    tenant_id = str(uuid4())
+    app.dependency_overrides[get_lead_scoring_compute_service] = lambda: StubScoringComputeService(
+        result={
+            "tenant_id": tenant_id,
+            "processed_lead_count": 1,
+            "skipped_lead_count": 1,
+            "stage_transition_count": 1,
+            "max_possible_score": 120,
+            "results": [
+                {
+                    "lead_id": str(uuid4()),
+                    "status": "active",
+                    "previous_score": 0,
+                    "raw_score": 120,
+                    "final_score": 100,
+                    "previous_stage": "pre_mql",
+                    "new_stage": "sql",
+                    "is_stage_manually_overridden": False,
+                    "skip_reason": None,
+                    "fit_score_delta": 60,
+                    "behavior_score_delta": 60,
+                    "matched_rule_names": ["SaaS ICP", "Demo Request"],
+                }
+            ],
+        }
+    )
+
+    with TestClient(app) as client:
+        response = client.post(f"/api/core/tenants/{tenant_id}/scoring/compute")
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["processed_lead_count"] == 1
+    assert response.json()["results"][0]["final_score"] == 100
+
+
+def test_compute_tenant_scores_returns_not_found_when_tenant_is_missing():
+    tenant_id = str(uuid4())
+    app.dependency_overrides[get_lead_scoring_compute_service] = (
+        lambda: StubScoringComputeService(missing=TenantNotFoundError())
+    )
+
+    with TestClient(app) as client:
+        response = client.post(f"/api/core/tenants/{tenant_id}/scoring/compute")
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "tenant not found"

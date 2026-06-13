@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from src.routes.health import router as health_router
 from src.routes.leads import router as leads_router
+from src.routes.scoring_compute import router as scoring_compute_router
 from src.routes.scoring_rule_contracts import router as scoring_rule_contracts_router
 from src.routes.scoring_rules import router as scoring_rules_router
 from src.routes.tenant_thresholds import router as tenant_thresholds_router
@@ -17,4 +18,5 @@ def create_api_router() -> APIRouter:
     api_router.include_router(tenant_thresholds_router)
     api_router.include_router(leads_router)
     api_router.include_router(scoring_rules_router)
+    api_router.include_router(scoring_compute_router)
     return api_router

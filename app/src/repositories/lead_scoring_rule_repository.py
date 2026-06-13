@@ -33,6 +33,27 @@ class LeadScoringRuleRepository:
             cursor.execute(query, {"tenant_id": tenant_id})
             return list(cursor.fetchall())
 
+    def fetch_active_by_tenant_id(self, tenant_id: UUID) -> list[dict]:
+        """Return only active scoring rules for a tenant."""
+        query = """
+            SELECT
+                id,
+                tenant_id,
+                rule_name,
+                rule_type,
+                score_delta,
+                is_active,
+                rule_config,
+                created_at,
+                updated_at
+            FROM lead_scoring_rules
+            WHERE tenant_id = %(tenant_id)s AND is_active = TRUE
+            ORDER BY created_at ASC
+        """
+        with self._connection.cursor() as cursor:
+            cursor.execute(query, {"tenant_id": tenant_id})
+            return list(cursor.fetchall())
+
     def fetch_by_id(self, tenant_id: UUID, rule_id: UUID) -> dict | None:
         """Return one scoring rule if it exists within the tenant scope."""
         query = """
