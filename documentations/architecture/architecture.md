@@ -4,7 +4,117 @@ This document contains the high-level container architecture diagram for the Ven
 
 ---
 
-## Container Diagram (V1 Draft)
+## Container Diagram (Clean View)
+
+> Same system, reorganised for readability. Nodes are grouped by domain. Arrows are collapsed (where multiple job types share the same path, they are listed on one edge label). Flow details live in the Workflow Coverage table and `user-flows.md` sequence diagrams.
+
+```mermaid
+flowchart LR
+    subgraph Clients["Client Layer"]
+        TUI["Tenant UI"]
+        SAU["Super Admin UI"]
+    end
+
+    subgraph External["External Services"]
+        PH["PostHog"]
+        SMTP["Email Service\n(SendGrid)"]
+        LLM["LLM Service"]
+        Web["Tenant Website\n(JS Snippet)"]
+    end
+
+    subgraph CRM["CRM Platform"]
+
+        subgraph API["API Service"]
+            direction TB
+            MW["Middleware\n(Auth · JWT · RLS)"]
+            CRUD["CRUD Handlers\n(Leads · Deals · Scoring Rules\nAccounts · Contacts · ICP\nAI Draft Approvals)"]
+            SCORE["Scoring Engine\n(Fit + Behavior → score & stage)"]
+            PROV["Provisioning Module"]
+            MW --> CRUD
+            MW --> SCORE
+            MW --> PROV
+        end
+
+        subgraph Ingestion["Async Ingestion"]
+            direction TB
+            WR["Webhook Receiver"]
+            MQ[("Message Queue\n(Redis / BullMQ)")]
+        end
+
+        subgraph Schedulers["Scheduled Jobs"]
+            direction TB
+            CronScoring["Scoring Cron\n⏱ Every 24h"]
+            CronOutbound["Outbound Dispatcher Cron\n⏱ Every 10 min"]
+        end
+
+        subgraph Workers["Worker Pool"]
+            direction TB
+            LW["Lead Generation Worker"]
+            OW["Outbound Worker"]
+            AW["AI Worker"]
+        end
+
+        DB[("PostgreSQL\n+ PgBouncer\n(RLS Enabled)")]
+    end
+
+    %% Client → API
+    TUI & SAU -->|"REST"| MW
+
+    %% Provisioning
+    PROV -->|"Create Org/Project\n+ Webhook"| PH
+    PROV --> DB & SMTP
+
+    %% Web tracking
+    Web -->|"JS Snippet"| PH
+
+    %% Ingestion path
+    PH -->|"Webhook POST"| WR
+    WR -->|"LEAD_GENERATION_JOB"| MQ
+    MQ -->|"LEAD_GENERATION_JOB"| LW
+    LW -->|"Upsert Lead\n+ first enrollment"| DB
+
+    %% CRUD → DB + first enrollment on manual lead create
+    CRUD --> DB
+    CRUD -->|"Send on AI draft approval"| SMTP
+
+    %% Scoring engine
+    CronScoring -->|"Daily trigger"| SCORE
+    SCORE -->|"HogQL query"| PH
+    SCORE --> DB
+    SCORE -->|"LEAD_STAGE_CHANGED_JOB"| MQ
+
+    %% Stage transition → Outbound Worker
+    MQ -->|"LEAD_STAGE_CHANGED_JOB\nOUTBOUND_EMAIL_JOB"| OW
+    OW --> DB & SMTP
+
+    %% Outbound dispatcher
+    CronOutbound -->|"OUTBOUND_EMAIL_JOB\nAI_DRAFT_JOB"| MQ
+    MQ -->|"AI_DRAFT_JOB"| AW
+    AW --> DB & LLM
+
+    %% Styles
+    classDef neutral fill:#ffffff,stroke:#64748b,stroke-width:1px;
+    classDef database fill:#f8fafc,stroke:#475569,stroke-width:2px;
+    classDef scheduler fill:#f0fdf4,stroke:#16a34a,stroke-width:1px;
+    classDef worker fill:#f0f9ff,stroke:#0284c7,stroke-width:1px;
+
+    class TUI,SAU,PH,SMTP,Web,LLM,MW,CRUD,SCORE,PROV,WR,MQ neutral;
+    class LW,OW,AW worker;
+    class CronScoring,CronOutbound scheduler;
+    class DB database;
+
+    style Clients fill:#f8fafc,stroke:#cbd5e1
+    style External fill:#f8fafc,stroke:#cbd5e1
+    style CRM fill:#f8fafc,stroke:#cbd5e1
+    style API fill:#ffffff,stroke:#e2e8f0
+    style Ingestion fill:#ffffff,stroke:#e2e8f0
+    style Schedulers fill:#f0fdf4,stroke:#bbf7d0
+    style Workers fill:#f0f9ff,stroke:#bae6fd
+```
+
+---
+
+## Container Diagram (Detailed View)
 
 ```mermaid
 flowchart TB
@@ -115,116 +225,6 @@ flowchart TB
     style External fill:#f8fafc,stroke:#cbd5e1,stroke-width:1px
     style CRM fill:#f8fafc,stroke:#cbd5e1,stroke-width:1px
     style APIService fill:#ffffff,stroke:#cbd5e1,stroke-width:1px
-```
-
----
-
-## Container Diagram (V2 — Cleaner Layout)
-
-> Same system, reorganised for readability. Nodes are grouped by domain. Arrows are collapsed (where multiple job types share the same path, they are listed on one edge label). Flow details live in the Workflow Coverage table and `user-flows.md` sequence diagrams.
-
-```mermaid
-flowchart LR
-    subgraph Clients["Client Layer"]
-        TUI["Tenant UI"]
-        SAU["Super Admin UI"]
-    end
-
-    subgraph External["External Services"]
-        PH["PostHog"]
-        SMTP["Email Service\n(SendGrid)"]
-        LLM["LLM Service"]
-        Web["Tenant Website\n(JS Snippet)"]
-    end
-
-    subgraph CRM["CRM Platform"]
-
-        subgraph API["API Service"]
-            direction TB
-            MW["Middleware\n(Auth · JWT · RLS)"]
-            CRUD["CRUD Handlers\n(Leads · Deals · Scoring Rules\nAccounts · Contacts · ICP\nAI Draft Approvals)"]
-            SCORE["Scoring Engine\n(Fit + Behavior → score & stage)"]
-            PROV["Provisioning Module"]
-            MW --> CRUD
-            MW --> SCORE
-            MW --> PROV
-        end
-
-        subgraph Ingestion["Async Ingestion"]
-            direction TB
-            WR["Webhook Receiver"]
-            MQ[("Message Queue\n(Redis / BullMQ)")]
-        end
-
-        subgraph Schedulers["Scheduled Jobs"]
-            direction TB
-            CronScoring["Scoring Cron\n⏱ Every 24h"]
-            CronOutbound["Outbound Dispatcher Cron\n⏱ Every 10 min"]
-        end
-
-        subgraph Workers["Worker Pool"]
-            direction TB
-            LW["Lead Generation Worker"]
-            OW["Outbound Worker"]
-            AW["AI Worker"]
-        end
-
-        DB[("PostgreSQL\n+ PgBouncer\n(RLS Enabled)")]
-    end
-
-    %% Client → API
-    TUI & SAU -->|"REST"| MW
-
-    %% Provisioning
-    PROV -->|"Create Org/Project\n+ Webhook"| PH
-    PROV --> DB & SMTP
-
-    %% Web tracking
-    Web -->|"JS Snippet"| PH
-
-    %% Ingestion path
-    PH -->|"Webhook POST"| WR
-    WR -->|"LEAD_GENERATION_JOB"| MQ
-    MQ -->|"LEAD_GENERATION_JOB"| LW
-    LW -->|"Upsert Lead\n+ first enrollment"| DB
-
-    %% CRUD → DB + first enrollment on manual lead create
-    CRUD --> DB
-    CRUD -->|"Send on AI draft approval"| SMTP
-
-    %% Scoring engine
-    CronScoring -->|"Daily trigger"| SCORE
-    SCORE -->|"HogQL query"| PH
-    SCORE --> DB
-    SCORE -->|"LEAD_STAGE_CHANGED_JOB"| MQ
-
-    %% Stage transition → Outbound Worker
-    MQ -->|"LEAD_STAGE_CHANGED_JOB\nOUTBOUND_EMAIL_JOB"| OW
-    OW --> DB & SMTP
-
-    %% Outbound dispatcher
-    CronOutbound -->|"OUTBOUND_EMAIL_JOB\nAI_DRAFT_JOB"| MQ
-    MQ -->|"AI_DRAFT_JOB"| AW
-    AW --> DB & LLM
-
-    %% Styles
-    classDef neutral fill:#ffffff,stroke:#64748b,stroke-width:1px;
-    classDef database fill:#f8fafc,stroke:#475569,stroke-width:2px;
-    classDef scheduler fill:#f0fdf4,stroke:#16a34a,stroke-width:1px;
-    classDef worker fill:#f0f9ff,stroke:#0284c7,stroke-width:1px;
-
-    class TUI,SAU,PH,SMTP,Web,LLM,MW,CRUD,SCORE,PROV,WR,MQ neutral;
-    class LW,OW,AW worker;
-    class CronScoring,CronOutbound scheduler;
-    class DB database;
-
-    style Clients fill:#f8fafc,stroke:#cbd5e1
-    style External fill:#f8fafc,stroke:#cbd5e1
-    style CRM fill:#f8fafc,stroke:#cbd5e1
-    style API fill:#ffffff,stroke:#e2e8f0
-    style Ingestion fill:#ffffff,stroke:#e2e8f0
-    style Schedulers fill:#f0fdf4,stroke:#bbf7d0
-    style Workers fill:#f0f9ff,stroke:#bae6fd
 ```
 
 ---

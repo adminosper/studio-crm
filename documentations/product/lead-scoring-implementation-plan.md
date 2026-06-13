@@ -113,7 +113,7 @@ Each lead will have:
 Recompute rules:
 
 - only leads with `status = active` are scored
-- score is recomputed every invocation
+- score is computed every invocation
 - stage is derived from thresholds unless `is_stage_manually_overridden = true`
 - manually overridden leads still get a fresh score, but stage remains unchanged
 
@@ -181,8 +181,8 @@ Stage mapping:
 
 We will expose:
 
-- recompute all active leads for one tenant
-- recompute one lead for one tenant
+- compute all active leads for one tenant
+- compute one lead for one tenant
 
 The API response should summarize:
 
@@ -379,7 +379,7 @@ At least one lead should have:
 
 ### 6.5 Recommended Seed Outcome
 
-After boot, the reviewer should be able to run one recompute call and observe:
+After boot, the reviewer should be able to run one compute call and observe:
 
 - a lead staying `pre_mql`
 - a lead becoming `mql`
@@ -528,7 +528,8 @@ Validation expectations:
 - rule type must be valid
 - rule config shape must match rule type
 - score delta must be integer
-- inactive rules must be ignored by recomputation
+- inactive rules must be ignored by score computation
+- active tenant rule totals may exceed `100`; final lead score is normalized proportionally during compute rather than rejecting rule insertion
 
 ### 9.4 Manual Override APIs
 
@@ -538,10 +539,9 @@ Validation expectations:
 Purpose:
 Demonstrate the rule that scoring updates score but does not overwrite a manually locked stage.
 
-### 9.5 Recompute APIs
+### 9.5 Compute APIs
 
-- `POST /api/core/tenants/{tenant_id}/scoring/recompute`
-- `POST /api/core/tenants/{tenant_id}/leads/{lead_id}/scoring/recompute`
+- `POST /api/core/tenants/{tenant_id}/scoring/compute`
 
 Response should expose:
 
@@ -568,11 +568,10 @@ The implementation should stay modular and align with `AGENTS.md`.
 ### 10.1 Services
 
 - `LeadScoringRuleValidationService`
-- `LeadBehaviorAggregationService`
 - `LeadFitScoringService`
 - `LeadBehaviorScoringService`
 - `LeadQualificationService`
-- `LeadScoreRecomputeService`
+- `LeadScoreComputeService`
 
 ### 10.2 Repositories
 
@@ -633,7 +632,7 @@ Purpose of each:
 
 ## 11. Scoring Engine Behavior
 
-### 11.1 Recompute Flow
+### 11.1 Compute Flow
 
 For each lead in scope:
 
@@ -647,7 +646,7 @@ For each lead in scope:
 8. optionally clamp score to a max value if we choose to enforce a hard ceiling
 9. derive stage from tenant thresholds unless manual override exists
 10. persist score and stage updates atomically
-11. record run summary
+11. return a run summary
 
 ### 11.2 Scoring Engine Design For This Slice
 
@@ -655,7 +654,7 @@ The scoring engine should stay deliberately simple and deterministic for this as
 
 Recommended design:
 
-- one manual recompute endpoint for one tenant only
+- one manual compute endpoint for one tenant only
 - one synchronous scoring pass
 - additive scoring
 - final score capped at `100`
@@ -666,7 +665,7 @@ Recommended design:
 Why no parallelization:
 
 - expected scale in this slice is small
-- manual recompute for ~100 leads is acceptable
+- manual compute for ~100 leads is acceptable
 - concurrency adds complexity without improving the quality of the assignment answer
 - correctness and debuggability matter more than micro-optimization here
 
@@ -679,7 +678,7 @@ Recommended mocking strategy:
 - keep only the raw `lead_events` table
 - do not add a second aggregated mock table
 - load relevant tenant events once
-- aggregate in memory for the recompute run
+- aggregate in memory for the compute run
 
 Why this is preferred:
 
@@ -712,36 +711,39 @@ Recommended feature-area files:
 - `src/services/lead_scoring_engine/service.py`
 - `src/services/lead_scoring_engine/fit_scorer.py`
 - `src/services/lead_scoring_engine/behavior_scorer.py`
-- `src/services/lead_scoring_engine/behavior_aggregator.py`
 - `src/services/lead_scoring_engine/qualification.py`
 - `src/services/lead_scoring_engine/types.py`
+- `src/integrations/posthog/service.py`
+- `src/integrations/posthog/mock_service.py`
 
 Purpose of each:
 
 - `service.py`
-  Orchestrates tenant recompute end to end.
+  Orchestrates tenant score computation end to end.
 - `fit_scorer.py`
   Evaluates validated fit rules against one lead.
 - `behavior_scorer.py`
   Applies behavior rules against pre-aggregated lead activity.
-- `behavior_aggregator.py`
-  Loads tenant events once and prepares in-memory lead-level event collections.
 - `qualification.py`
   Maps final score to `pre_mql`, `mql`, or `sql`.
 - `types.py`
-  Holds typed structures for recompute summaries and per-lead results.
+  Holds typed structures for compute summaries and per-lead results.
+- `integrations/posthog/service.py`
+  Exposes the application-facing PostHog integration boundary.
+- `integrations/posthog/mock_service.py`
+  Loads mocked tenant event data from local PostgreSQL tables.
 
-### 11.6 Manual Recompute Endpoint Scope
+### 11.6 Manual Compute Endpoint Scope
 
 For now, only one endpoint is required:
 
-- `POST /api/core/tenants/{tenant_id}/scoring/recompute`
+- `POST /api/core/tenants/{tenant_id}/scoring/compute`
 
-The single-lead recompute endpoint can remain deferred unless we explicitly need it later.
+The single-lead compute endpoint can remain deferred unless we explicitly need it later.
 
-### 11.7 Tenant Recompute Response Shape
+### 11.7 Tenant Compute Response Shape
 
-The recompute response should summarize:
+The compute response should summarize:
 
 - `tenant_id`
 - `processed_lead_count`
@@ -884,17 +886,17 @@ Rule-contract and scoring-engine work should be split into smaller subtasks:
 
 ### Milestone 4
 
-Scoring-engine and manual recompute work should be split into smaller subtasks:
+Scoring-engine and manual compute work should be split into smaller subtasks:
 
-1. Add `lead_scoring_engine` feature folder and typed recompute result structures.
+1. Add `lead_scoring_engine` feature folder and typed compute result structures.
 2. Add fit scorer for validated fit rules.
-3. Add mock behavior aggregator that bulk-loads tenant events once for the recompute run.
+3. Add mock PostHog service that bulk-loads tenant events once for the compute run.
 4. Add behavior scorer on top of the in-memory aggregated event collections.
 5. Add qualification service for threshold-based stage mapping.
-6. Add tenant recompute orchestration service.
-7. Add `POST /api/core/tenants/{tenant_id}/scoring/recompute`.
+6. Add tenant compute orchestration service.
+7. Add `POST /api/core/tenants/{tenant_id}/scoring/compute`.
 8. Add skip handling for `disqualified` and `converted` leads.
-9. Add manual-stage-override protection during recompute.
+9. Add manual-stage-override protection during compute.
 10. Add tests for score cap, skip behavior, stage transitions, and behavior window filtering.
 
 ### Milestone 5
@@ -915,10 +917,10 @@ The final README should guide the reviewer through a short flow like this:
 3. inspect seeded leads for tenant A
 4. inspect seeded scoring rules for tenant A
 5. insert new mock events for one lead
-6. run tenant recompute
+6. run tenant compute
 7. verify score and stage changed
 8. set manual stage override
-9. add more events and rerun recompute
+9. add more events and rerun compute
 10. verify score changes but stage remains locked
 11. repeat for tenant B to show isolation and different thresholds
 

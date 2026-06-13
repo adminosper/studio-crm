@@ -1,6 +1,6 @@
 # Product Requirements Document (PRD): Venture-Studio CRM
 
-This PRD outlines the requirements, features, and phases for the Venture-Studio CRM (Multi-tenant Growth Engine).
+This PRD outlines the requirements, features, and scope for the Venture-Studio CRM (Multi-tenant Growth Engine) designed as part of this assignment.
 
 ---
 
@@ -33,22 +33,23 @@ All architectural decisions and query strategies documented in this PRD are desi
 
 ---
 
-## 4. Release Phases & Scope
+## 4. System Design Scope (Assignment Specification)
 
-### Phase 1 (V1 Scope)
-The initial release will focus on core B2B customer relationship operations, event-driven lead scoring, marketing attribution, and AI-powered sales outreach.
+### Designed System Scope (Assignment Blueprint)
+*(Note: This section outlines the system architecture blueprint and designed scope as specified for this assignment. If we have to scope a real V1 for implementation under constraints, that scoping and prioritization will live in the proposal doc.)*
+
+The blueprint specifies a multi-tenant Venture-Studio CRM covering core B2B customer relationship operations, event-driven lead scoring, and AI-powered sales outreach.
 
 #### A. Tenant-Level Features (Startup Workspace)
 These features are strictly isolated per startup tenant.
 
-1.  **Lead Generation & Management:**
+1.  **Lead Ingestion & Management:**
     *   Manual lead creation and management interface.
     *   API & Webhook connector layer for automated lead capture (e.g., from web forms, landing pages).
 2.  **Deal Creation & Lifecycle Management:**
     *   Manual deal creation and stage progression.
-    *   One-click Lead conversion (automatically creates Account, Contact, and Deal).
     *   Custom pipelines and stage configurations per tenant.
-    *   Stage transition audit trails and simple forecasting engine.
+    *   Simple weighted sales forecasting engine.
 3.  **Lead Scoring & Qualification:**
     *   Integration with **PostHog** for user event tracking.
     *   **Rule Types:** Tenant-defined Fit rules (static firmographics) and Behavior rules (event aggregations). Both share a single DB table using JSONB configurations.
@@ -56,11 +57,7 @@ These features are strictly isolated per startup tenant.
     *   **Qualification Transitions:** The cron automatically maps computed scores to `Lead.stage` (`pre_mql`, `mql`, `sql`) based on tenant-defined threshold limits (`mql_score_threshold`, `sql_score_threshold`).
     *   **Status vs Stage:** A lead's operational `status` (`active`, `disqualified`, `converted`) is distinct from its lifecycle `stage`. Converted/disqualified leads are frozen and skipped during scoring.
     *   **Overrides:** Reps can manually override a lead's stage; the system prevents the cron from downgrading manually overridden leads.
-4.  **Performance Marketing Attribution:**
-    *   Extraction of UTM parameters (`utm_source`, `utm_medium`, etc.) from PostHog events.
-    *   Local database synchronization of UTM parameters for low-latency queries.
-    *   Attribution dashboards tracking pipeline revenue and leads by campaign.
-5.  **Outbound Automation:**
+4.  **Outbound Automation:**
     *   **Pre-MQL (Rules & Static Templates):** Triggered multi-step email sequences based on static templates and delay day intervals, with stop criteria (replies, unsubscribes, stage change).
     *   **MQL (AI-Assisted Drafts):** LLM-generated drafts via a single base prompt utilizing tools (history, past emails) and a multi-step schedule (`delay_days`).
     *   **Human-in-the-Loop:** Drafts enter an approval queue. Reps can approve to send or reject. In V1, rejection simply skips the draft and the system schedules the next follow-up.
@@ -69,15 +66,15 @@ These features are strictly isolated per startup tenant.
 #### B. Studio-Level Features (Parent Workspace)
 These features roll up data across all startups and allow parent-level defaults.
 
-6.  **Venture Studio Parent Workspace (Super Admin Role):**
+5.  **Venture Studio Parent Workspace (Super Admin Role):**
     *   Tenant switcher dropdown in the navigation header to toggle between startup instances.
     *   Rolled-up Sales Dashboard displaying aggregated pipeline metrics (Total Value, Total Won, Total Lost) for a date range across all startup tenants.
     *   Centralized default prompt and parameter templates for the AI Outbound Engine (which tenants can inherit or override).
 
 ---
 
-### Phase 2 (V2 Scope - Deferred)
-The following features are deliberately deferred to ensure a focused and robust V1 delivery.
+### Deferred Capabilities (Future Scopes)
+The following features are deferred from the primary system design blueprint.
 
 #### A. Tenant-Level Features (Deferred)
 1.  **Customer Success & Service (Support Ticketing):**
@@ -87,12 +84,16 @@ The following features are deliberately deferred to ensure a focused and robust 
 2.  **General Workflow Automation Engine:**
     *   Extensible webhook and action trigger builder (e.g., *"If Deal value > $10,000, trigger Slack alert to channel #sales"*).
     *   Integrations with third-party productivity apps (e.g., Slack, Notion, Jira).
+3.  **Performance Marketing Attribution:**
+    *   Extraction of UTM parameters (`utm_source`, `utm_medium`, etc.) from PostHog events.
+    *   Local database synchronization of UTM parameters for low-latency queries.
+    *   Attribution dashboards tracking pipeline revenue and leads by campaign.
 
 #### B. Studio-Level Features (Deferred)
-3.  **Advanced AI Reply Handling:**
+4.  **Advanced AI Reply Handling:**
     *   Fully automated categorization of inbound email replies (e.g., Interested, Not Interested, Out of Office).
     *   Auto-drafting of follow-up email replies for rep approval based on response sentiment.
-4.  **Rolled-Up Marketing Attribution Dashboard:**
+5.  **Rolled-Up Marketing Attribution Dashboard:**
     *   Aggregated leads and pipeline revenue generated per UTM campaign/source across all startup tenants (parent workspace view).
     *   Powered by querying/aggregating PostHog event data from individual tenant projects.
 
@@ -125,7 +126,20 @@ This section documents explicit architectural components that require re-evaluat
 
 ## 7. Functional Requirements & Scenarios
 
-As we align on individual system scenarios, we will specify detailed functional requirements and reference their corresponding sequence diagrams here.
+### Crux of Functional Requirements
+Before diving into detailed specifications, this summary outlines the core operational flows and business rules that govern the platform:
+
+1. **Studio & Tenant Bootstrapping:** A strict chronological setup sequence. The platform starts completely locked. First, the Super Admin must bootstrap the studio-wide default AI prompt instructions. Only then can individual tenant startup workspaces be provisioned.
+2. **Strict Multi-Tenant Partitioning:** Standard users are bound to their startup's tenant workspace. The application automatically filters all read and write queries, and PostgreSQL Row-Level Security (RLS) acts as a database safety net to prevent cross-tenant data leaks.
+3. **Decoupled Lead State Machine:** Lead operational `status` (Active, Disqualified, Converted) is managed by sales representatives, while lead lifecycle `stage` (Pre-MQL, MQL, SQL) is computed automatically by the Scoring Engine using fit and behavior rules.
+4. **Lifecycle-Targeted Outbound Sequences:** Marketing automation changes dynamically based on the lead's lifecycle stage:
+   - **Pre-MQL:** Rules-driven static email templates sent automatically based on delay schedules.
+   - **MQL:** AI-generated personalized drafts created by the LLM and placed in a human-in-the-loop review queue for rep approval.
+   - **SQL:** Zero automated messages; reps build manual relationships.
+5. **Dynamic Sequence Transitions:** Outbound sequences auto-cancel or auto-enroll on stage promotion or demotion (e.g. crossing threshold limits cancels static template sequence and registers lead in AI sequence).
+6. **Portfolio Oversights & Rollups:** Super Admins can switch between tenant workspaces using a switcher, and view read-only Sales Forecasting dashboards aggregated on-the-fly from read-replicas.
+
+*(Each requirement is written in detail below to address the exact system working, edge-cases, and operational nuances.)*
 
 ### A. Workspace & User Provisioning (Studio Bootstrap & Tenant Onboarding)
 
@@ -383,7 +397,7 @@ This section describes features available exclusively to Venture Studio Super Ad
     *   **Composite Indexing:** The `Deal` table utilizes a B-tree composite index optimized for this query structure:
         *   Index definition: `CREATE INDEX idx_deals_rollup ON deals (created_at, stage_id, amount) WHERE deleted_at IS NULL;`
         *   This index allows the query planner to filter by date range, join with pipeline stages, and sum amounts directly from the index (Index-Only Scan), avoiding expensive heap scans.
-    *   **Performance Expectation:** Based on the V1 design envelope of 100 tenants with ~100 deals each (10K total deals), on-the-fly SQL aggregation utilizing these indexes will execute in **10–20ms** (steady-state, warm buffer cache) to **~50ms** (worst-case: cold buffer cache, physical index page reads, WAL replay lag on the read replica) end-to-end. Both ranges are well within acceptable UI response budgets, making cached or pre-aggregated tables unnecessary for V1.
+    *   **Performance Expectation:** Based on the V1 design envelope of 100 tenants with approx. 100 deals each (10K total deals), on-the-fly SQL aggregation utilizing these indexes will execute in **10–20ms** (steady-state, warm buffer cache) to **approx. 50ms** (worst-case: cold buffer cache, physical index page reads, WAL replay lag on the read replica) end-to-end. Both ranges are well within acceptable UI response budgets, making cached or pre-aggregated tables unnecessary for V1.
     *   **Scale Limits & Re-evaluation:** Refer to **Section 6.1 (Super Admin Rolled-Up Sales Dashboard)** for the migration path (Redis caching layer, then two-tier nightly aggregate table) if database deal volume exceeds the V1 design envelope.
 
 ---
@@ -431,5 +445,24 @@ Items listed here are **not decided** and have not been incorporated into the V1
 |---|---|---|
 | **BRIN Index on `Deal.created_at`** | Block Range Index — low-overhead range index suited for append-heavy, sequentially-inserted tables. Would complement the composite B-tree index on the `Deal` table for date-range scans. | Needs further reading on BRIN trade-offs (low cardinality selectivity, suitability vs B-tree for this access pattern) before deciding if it adds value at V1 scale. |
 
+---
 
+## 9. Non-Functional Requirements (NFRs)
 
+This section specifies operational constraints, performance targets, and safety policies for the Venture-Studio CRM.
+
+### 9.1 Security & Multi-Tenancy Guardrails
+*   **Database Isolation Policy:** All queries from tenant-level sessions must enforce PostgreSQL Row-Level Security (RLS) policies based on a transaction-scoped `tenant_id` session parameter (`SET LOCAL`).
+*   **Connection Pooling Security:** The database connection pool (PgBouncer) must guarantee transaction context safety. Any connection returned to the pool must automatically clear transaction-scoped context parameters to prevent tenant state bleeding.
+*   **Secure API Authentication:** User sessions are verified using JSON Web Tokens (JWT) signed with a secure algorithm (e.g. HS256/RS256). Tokens must carry both identity role and active workspace claims to allow context switching.
+
+### 9.2 Reliability & Fault Tolerance
+*   **Asynchronous Job Retry Policy:** All queue worker jobs (lead generation, static outbound, AI draft generation) must support retries with exponential backoff and jitter to survive database locks or external API outages.
+*   **Quarantine Dead-Letter Queues (DLQ):** Jobs failing beyond their maximum retry thresholds must be moved to a DLQ to prevent blocking the worker pool. Alerts must notify operators of DLQ activity.
+
+### 9.3 Observability & Performance
+*   **API Latency Budgets:**
+    *   Read operations (listing leads, loading dashboard configurations): P95 latency < 100ms.
+    *   Write mutations (saving lead edits, creating scoring rules): P95 latency < 200ms.
+*   **Standardized Logging:** Logs must be emitted in structured JSON format to stdout, carrying request IDs, tenant IDs, and context parameters to facilitate cross-service tracing.
+*   **Service Metrics:** Monitor queue depths, worker execution latencies, database connection pool exhaustion rates, and LLM API roundtrip times.

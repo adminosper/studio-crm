@@ -8,7 +8,8 @@ To understand the core CRM domain concepts and the terminologies used for B2B Sa
 
 ## 📖 Documentation Directory
 
-Refer to the following documents for design, architecture, and product decisions:
+### 🏆 Required Deliverables
+* **[Systems Design Document (SYSTEMS_DESIGN.md)](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/SYSTEMS_DESIGN.md):** The primary required systems design document summarizing architecture diagrams, data models, RLS context isolation, trade-offs, and scaling limits.
 
 ### 1. Product & Domain Specs
 * **[Domain Knowledge](file:///Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/domain/domain-knowledge.md):** Glossary of CRM entities and lifecycle flow.
