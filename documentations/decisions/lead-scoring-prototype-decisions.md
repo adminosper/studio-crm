@@ -29,7 +29,7 @@ These are intentionally separate from [decisions.md](/Users/shagunarora/work-in-
   - we do not want to add a real PostHog metadata integration in this prototype
   - the same source should drive both contract discovery and insert validation
 - **Current implementation:**
-  - mock event catalog lives in [app/src/services/lead_scoring_rules/contracts/posthog_event_catalog.py](/Users/shagunarora/work-in-progress/meraki-labs-assignment/app/src/services/lead_scoring_rules/contracts/posthog_event_catalog.py)
+  - mock event catalog lives in [app/src/integrations/posthog/event_catalog.py](/Users/shagunarora/work-in-progress/meraki-labs-assignment/app/src/integrations/posthog/event_catalog.py)
   - the behavioral contract exposes those values via [app/src/services/lead_scoring_rules/contracts/registry.py](/Users/shagunarora/work-in-progress/meraki-labs-assignment/app/src/services/lead_scoring_rules/contracts/registry.py)
   - API-level validation enforces the same list in [app/src/services/lead_scoring_rules/validations/behavior.py](/Users/shagunarora/work-in-progress/meraki-labs-assignment/app/src/services/lead_scoring_rules/validations/behavior.py)
 - **Deferred from V1:** Real PostHog-backed event discovery.

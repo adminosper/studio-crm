@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.services.lead_scoring_rules.contracts.posthog_event_catalog import list_mock_posthog_event_names
+from src.integrations.posthog.event_catalog import list_mock_posthog_event_names
 from src.services.lead_scoring_rules.contracts.types import RuleContractDefinition
 from src.services.lead_scoring_rules.contracts.types import RuleContractFieldDefinition
 from src.services.lead_scoring_rules.contracts.types import RuleType
