@@ -145,6 +145,13 @@ def test_list_scoring_rule_contracts_returns_versioned_contracts():
 
     assert response.status_code == 200
     assert any(contract["rule_type"] == "fit" and contract["version"] == 1 for contract in response.json())
+    behavior_contract = next(contract for contract in response.json() if contract["rule_type"] == "behavior")
+    event_name_field = next(
+        field_definition
+        for field_definition in behavior_contract["field_definitions"]
+        if field_definition["name"] == "event_name"
+    )
+    assert "pricing_page_viewed" in event_name_field["allowed_values"]
 
 
 def test_get_scoring_thresholds_returns_tenant_configuration():

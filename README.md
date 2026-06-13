@@ -79,3 +79,15 @@ docker compose up --build
 ```
 
 Later milestones will add the scoring APIs, helper APIs, and the qualification engine.
+
+## Prototype Decisions
+
+For the lead-scoring slice, some reviewer-facing behavior is intentionally mocked in code for speed:
+
+- Behavioral scoring rule `event_name` validation uses a code-defined mock PostHog event catalog.
+- The allowed event names are returned by the scoring-rule contract API, so reviewers can discover them before inserting rules.
+- `property_filters` are accepted as open JSON objects in V1; a mocked property catalog is intentionally deferred.
+
+Reference:
+
+- [documentations/decisions/lead-scoring-prototype-decisions.md](/Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/lead-scoring-prototype-decisions.md)

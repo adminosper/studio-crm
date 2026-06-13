@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.services.lead_scoring_rules.contracts.posthog_event_catalog import list_mock_posthog_event_names
 from src.services.lead_scoring_rules.contracts.types import RuleContractDefinition
 from src.services.lead_scoring_rules.contracts.types import RuleContractFieldDefinition
 from src.services.lead_scoring_rules.contracts.types import RuleType
@@ -13,6 +14,7 @@ FIT_ALLOWED_OPERATOR_MATRIX = {
     "title": ("equals", "not_equals", "in", "not_in", "contains"),
     "company_size": ("equals", "not_equals", "gte", "lte"),
 }
+MOCK_POSTHOG_EVENT_NAMES = list_mock_posthog_event_names()
 
 FIT_RULE_V1 = RuleContractDefinition(
     rule_type="fit",
@@ -77,6 +79,7 @@ BEHAVIOR_RULE_V1 = RuleContractDefinition(
             field_type="string",
             required=True,
             description="Event name to aggregate over the lead event stream.",
+            allowed_values=MOCK_POSTHOG_EVENT_NAMES,
         ),
         RuleContractFieldDefinition(
             name="aggregate_operator",

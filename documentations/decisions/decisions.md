@@ -1,5 +1,7 @@
 # Design Decisions
 
+Implementation-specific prototype decisions for the working lead-scoring slice live in [lead-scoring-prototype-decisions.md](/Users/shagunarora/work-in-progress/meraki-labs-assignment/documentations/decisions/lead-scoring-prototype-decisions.md).
+
 ## 1. CRM Scope: B2B Focus
 * **Decision:** We will restrict the initial scope of the Venture-Studio CRM to B2B (Business-to-Business) scenarios.
 * **Details:**

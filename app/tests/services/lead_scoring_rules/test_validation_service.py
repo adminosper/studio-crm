@@ -66,6 +66,25 @@ def test_validate_and_normalize_rejects_behavior_rule_without_lookback_days():
     assert exc_info.value.field_path == "rule_config.lookback_days"
 
 
+def test_validate_and_normalize_rejects_unknown_behavior_event_name():
+    validation_service = _build_validation_service()
+
+    with pytest.raises(RuleConfigValidationError) as exc_info:
+        validation_service.validate_and_normalize(
+            rule_type="behavior",
+            rule_config={
+                "version": 1,
+                "event_name": "unknown_event_name",
+                "aggregate_operator": "count_gte",
+                "value": 1,
+                "lookback_days": 30,
+            },
+        )
+
+    assert exc_info.value.field_path == "rule_config.event_name"
+    assert "pricing_page_viewed" in (exc_info.value.allowed_values or [])
+
+
 def test_normalize_persisted_rule_config_upgrades_legacy_behavior_rule():
     validation_service = _build_validation_service()
 

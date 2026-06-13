@@ -24,10 +24,17 @@ class BehaviorScoringRuleValidator(BaseScoringRuleValidator):
             )
 
         event_name = rule_config["event_name"]
+        allowed_event_names = self._get_allowed_values(contract=contract, field_name="event_name")
         if not isinstance(event_name, str) or event_name.strip() == "":
             self.raise_validation_error(
                 "behavior rule event_name must be a non-empty string",
                 field_path="rule_config.event_name",
+            )
+        if event_name not in allowed_event_names:
+            self.raise_validation_error(
+                "unsupported behavior event_name",
+                field_path="rule_config.event_name",
+                allowed_values=allowed_event_names,
             )
 
         aggregate_operator = rule_config["aggregate_operator"]
