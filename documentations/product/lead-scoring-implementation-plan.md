@@ -518,6 +518,11 @@ Allow tenant-specific qualification tuning.
 - `PUT /api/core/tenants/{tenant_id}/scoring-rules/{rule_id}`
 - `DELETE /api/core/tenants/{tenant_id}/scoring-rules/{rule_id}`
 
+Contract discovery APIs:
+
+- `GET /api/core/scoring-rule-contracts`
+- `GET /api/core/scoring-rule-contracts/{rule_type}`
+
 Validation expectations:
 
 - rule type must be valid
@@ -584,6 +589,46 @@ The implementation should stay modular and align with `AGENTS.md`.
 - score summary formatter
 - mock data factory helpers
 
+### 10.4 Lead Scoring Rule Feature Folder
+
+Lead-scoring-rule-specific logic should live together under one feature area instead of being scattered.
+
+Recommended structure:
+
+- `src/services/lead_scoring_rules/service.py`
+- `src/services/lead_scoring_rules/contracts/registry.py`
+- `src/services/lead_scoring_rules/contracts/service.py`
+- `src/services/lead_scoring_rules/contracts/types.py`
+- `src/services/lead_scoring_rules/validations/base.py`
+- `src/services/lead_scoring_rules/validations/fit.py`
+- `src/services/lead_scoring_rules/validations/behavior.py`
+- `src/services/lead_scoring_rules/validations/helpers.py`
+- `src/services/lead_scoring_rules/validations/service.py`
+- `src/services/lead_scoring_rules/normalization/rule_config.py`
+
+Purpose of each:
+
+- `service.py`
+  Owns tenant-scoped rule CRUD orchestration and delegates validation/normalization.
+- `contracts/registry.py`
+  Holds the versioned rule-contract registry used by both APIs and validators.
+- `contracts/service.py`
+  Exposes contract discovery for non-tenant core APIs.
+- `contracts/types.py`
+  Holds typed structures used by contract resolution and validation.
+- `validations/base.py`
+  Defines the common validator interface for future shared pre-checks.
+- `validations/fit.py`
+  Validates fit-rule config against a specific contract version.
+- `validations/behavior.py`
+  Validates behavior-rule config against a specific contract version.
+- `validations/helpers.py`
+  Contains shared validation helpers used across rule validators.
+- `validations/service.py`
+  Resolves contracts by version and dispatches validation.
+- `normalization/rule_config.py`
+  Converts accepted or legacy configs into one canonical stored representation.
+
 ---
 
 ## 11. Scoring Engine Behavior
@@ -603,6 +648,142 @@ For each lead in scope:
 9. derive stage from tenant thresholds unless manual override exists
 10. persist score and stage updates atomically
 11. record run summary
+
+### 11.2 Scoring Engine Design For This Slice
+
+The scoring engine should stay deliberately simple and deterministic for this assignment.
+
+Recommended design:
+
+- one manual recompute endpoint for one tenant only
+- one synchronous scoring pass
+- additive scoring
+- final score capped at `100`
+- no queue
+- no background worker
+- no parallelization
+
+Why no parallelization:
+
+- expected scale in this slice is small
+- manual recompute for ~100 leads is acceptable
+- concurrency adds complexity without improving the quality of the assignment answer
+- correctness and debuggability matter more than micro-optimization here
+
+### 11.3 Mock Aggregation Strategy
+
+Behavior aggregation is mocked in this slice because real aggregation would normally come from PostHog.
+
+Recommended mocking strategy:
+
+- keep only the raw `lead_events` table
+- do not add a second aggregated mock table
+- load relevant tenant events once
+- aggregate in memory for the recompute run
+
+Why this is preferred:
+
+- avoids maintaining consistency between raw and aggregated mock tables
+- reduces schema complexity
+- is easier for a reviewer to understand
+- is sufficient at this scale
+
+### 11.4 Behavior Aggregation Execution Model
+
+The engine should avoid a query pattern like:
+
+- `number_of_leads * number_of_behavior_rules * query_per_combination`
+
+Instead it should use a bulk execution model:
+
+1. load all active leads for the tenant
+2. load all active behavior rules for the tenant
+3. derive the maximum required lookback window across behavior rules
+4. load all tenant events within that outer window in one fetch
+5. group events in memory by `lead_id`
+6. evaluate each behavior rule against each lead's already-loaded event list
+
+This keeps the implementation simple while avoiding obvious inefficiency.
+
+### 11.5 Mock Aggregation Service Structure
+
+Recommended feature-area files:
+
+- `src/services/lead_scoring_engine/service.py`
+- `src/services/lead_scoring_engine/fit_scorer.py`
+- `src/services/lead_scoring_engine/behavior_scorer.py`
+- `src/services/lead_scoring_engine/behavior_aggregator.py`
+- `src/services/lead_scoring_engine/qualification.py`
+- `src/services/lead_scoring_engine/types.py`
+
+Purpose of each:
+
+- `service.py`
+  Orchestrates tenant recompute end to end.
+- `fit_scorer.py`
+  Evaluates validated fit rules against one lead.
+- `behavior_scorer.py`
+  Applies behavior rules against pre-aggregated lead activity.
+- `behavior_aggregator.py`
+  Loads tenant events once and prepares in-memory lead-level event collections.
+- `qualification.py`
+  Maps final score to `pre_mql`, `mql`, or `sql`.
+- `types.py`
+  Holds typed structures for recompute summaries and per-lead results.
+
+### 11.6 Manual Recompute Endpoint Scope
+
+For now, only one endpoint is required:
+
+- `POST /api/core/tenants/{tenant_id}/scoring/recompute`
+
+The single-lead recompute endpoint can remain deferred unless we explicitly need it later.
+
+### 11.7 Tenant Recompute Response Shape
+
+The recompute response should summarize:
+
+- `tenant_id`
+- `processed_lead_count`
+- `skipped_lead_count`
+- `stage_transition_count`
+- `results`
+
+Each per-lead result should include:
+
+- `lead_id`
+- `previous_score`
+- `new_score`
+- `previous_stage`
+- `new_stage`
+- `status`
+- `skip_reason` when applicable
+- `matched_fit_rules`
+- `matched_behavior_rules`
+
+### 11.8 Lead Skip Rules
+
+The scoring engine should skip:
+
+- `status = disqualified`
+- `status = converted`
+
+If a lead is skipped:
+
+- score remains unchanged
+- stage remains unchanged
+- response should explain the skip reason
+
+### 11.9 Manual Stage Override Behavior
+
+If `is_stage_manually_overridden = true`:
+
+- recompute the score normally
+- update `score`
+- update `score_last_updated_at`
+- do not change `stage`
+
+This should be explicit in both implementation and tests.
 
 ### 11.2 Recommended Simplifications
 
@@ -686,16 +867,35 @@ This is the recommended execution order when we start coding.
 
 ### Milestone 3
 
-- rule validation
-- fit scoring engine
-- behavior scoring engine
-- qualification engine
+Rule-contract and scoring-engine work should be split into smaller subtasks:
+
+1. Add rule contract discovery endpoints under `/api/core/scoring-rule-contracts`.
+2. Introduce a central versioned contract registry for `fit` and `behavior` rules.
+3. Add `version` inside `rule_config` for both seed data and API-created rules.
+4. Add `BaseScoringRuleValidator` as the common validator interface.
+5. Add `FitScoringRuleValidator` for fit-rule version-specific validation.
+6. Add `BehaviorScoringRuleValidator` for behavior-rule version-specific validation.
+7. Add `LeadScoringRuleValidationService` to resolve `rule_type + version`, dispatch the correct validator, and return canonical config.
+8. Tighten rule insertion and rule update flows so DB writes happen only after semantic validation.
+9. Add canonical normalization rules, especially for optional objects such as `property_filters`.
+10. Build the fit scoring engine.
+11. Build the behavior scoring engine.
+12. Build the qualification stage mapping engine.
 
 ### Milestone 4
 
-- recompute APIs
-- run summaries
-- manual stage override APIs
+Scoring-engine and manual recompute work should be split into smaller subtasks:
+
+1. Add `lead_scoring_engine` feature folder and typed recompute result structures.
+2. Add fit scorer for validated fit rules.
+3. Add mock behavior aggregator that bulk-loads tenant events once for the recompute run.
+4. Add behavior scorer on top of the in-memory aggregated event collections.
+5. Add qualification service for threshold-based stage mapping.
+6. Add tenant recompute orchestration service.
+7. Add `POST /api/core/tenants/{tenant_id}/scoring/recompute`.
+8. Add skip handling for `disqualified` and `converted` leads.
+9. Add manual-stage-override protection during recompute.
+10. Add tests for score cap, skip behavior, stage transitions, and behavior window filtering.
 
 ### Milestone 5
 

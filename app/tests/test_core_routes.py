@@ -5,10 +5,13 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from src.main import app
+from src.services.lead_scoring_rules.contracts.service import ScoringRuleContractService
 from src.shared.dependencies import get_lead_scoring_rule_service
+from src.shared.dependencies import get_scoring_rule_contract_service
 from src.shared.dependencies import get_lead_service
 from src.shared.dependencies import get_tenant_service
 from src.shared.exceptions import LeadNotFoundError
+from src.shared.exceptions import RuleConfigValidationError
 from src.shared.exceptions import ScoringRuleNotFoundError
 from src.shared.exceptions import TenantNotFoundError
 
@@ -126,10 +129,22 @@ def _sample_rule() -> dict:
         "rule_type": "fit",
         "score_delta": 20,
         "is_active": True,
-        "rule_config": {"field": "industry", "operator": "in", "value": ["SaaS", "FinTech"]},
+        "rule_config": {"version": 1, "field": "industry", "operator": "in", "value": ["SaaS", "FinTech"]},
         "created_at": "2026-06-12T10:00:00Z",
         "updated_at": "2026-06-12T10:00:00Z",
     }
+
+
+def test_list_scoring_rule_contracts_returns_versioned_contracts():
+    app.dependency_overrides[get_scoring_rule_contract_service] = lambda: ScoringRuleContractService()
+
+    with TestClient(app) as client:
+        response = client.get("/api/core/scoring-rule-contracts")
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert any(contract["rule_type"] == "fit" and contract["version"] == 1 for contract in response.json())
 
 
 def test_get_scoring_thresholds_returns_tenant_configuration():
@@ -187,6 +202,7 @@ def test_create_scoring_rule_returns_created_rule():
                 "score_delta": 20,
                 "is_active": True,
                 "rule_config": {
+                    "version": 1,
                     "field": "industry",
                     "operator": "in",
                     "value": ["SaaS", "FinTech"],
@@ -198,6 +214,41 @@ def test_create_scoring_rule_returns_created_rule():
 
     assert response.status_code == 201
     assert response.json()["rule_name"] == "SaaS ICP"
+
+
+def test_create_scoring_rule_returns_validation_error_for_invalid_contract():
+    tenant_id = str(uuid4())
+    validation_error = RuleConfigValidationError(
+        message="unsupported rule contract version",
+        field_path="rule_config.version",
+        allowed_values=[1],
+    )
+    app.dependency_overrides[get_lead_scoring_rule_service] = (
+        lambda: StubScoringRuleService(missing=validation_error)
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/core/tenants/{tenant_id}/scoring-rules",
+            json={
+                "rule_name": "Pricing Page Intent",
+                "rule_type": "behavior",
+                "score_delta": 20,
+                "is_active": True,
+                "rule_config": {
+                    "version": 9,
+                    "event_name": "pricing_page_viewed",
+                    "aggregate_operator": "count_gte",
+                    "value": 2,
+                    "lookback_days": 30,
+                },
+            },
+        )
+
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["field_path"] == "rule_config.version"
 
 
 def test_delete_scoring_rule_returns_not_found_when_service_raises():

@@ -102,14 +102,14 @@ SELECT
     seeded_rules.rule_config::jsonb
 FROM (
     VALUES
-        ('Acme SaaS', 'SaaS ICP', 'fit', 20, TRUE, '{"field":"industry","operator":"in","value":["SaaS","FinTech"]}'),
-        ('Acme SaaS', 'Mid Market Company Size', 'fit', 15, TRUE, '{"field":"company_size","operator":"gte","value":200}'),
-        ('Acme SaaS', 'Pricing Page Intent', 'behavior', 20, TRUE, '{"event_name":"pricing_page_viewed","aggregate_operator":"count_gte","value":2,"lookback_days":30}'),
-        ('Acme SaaS', 'Demo Request Intent', 'behavior', 30, TRUE, '{"event_name":"demo_requested","aggregate_operator":"count_gte","value":1,"lookback_days":30}'),
-        ('Beta Fintech', 'Fintech ICP', 'fit', 25, TRUE, '{"field":"industry","operator":"equals","value":"FinTech"}'),
-        ('Beta Fintech', 'Founder Persona', 'fit', 10, TRUE, '{"field":"title","operator":"contains","value":"Founder"}'),
-        ('Beta Fintech', 'Pricing Page Intent', 'behavior', 15, TRUE, '{"event_name":"pricing_page_viewed","aggregate_operator":"count_gte","value":3,"lookback_days":30}'),
-        ('Beta Fintech', 'Case Study Download Intent', 'behavior', 25, TRUE, '{"event_name":"case_study_downloaded","aggregate_operator":"count_gte","value":1,"lookback_days":14}')
+        ('Acme SaaS', 'SaaS ICP', 'fit', 20, TRUE, '{"version":1,"field":"industry","operator":"in","value":["SaaS","FinTech"]}'),
+        ('Acme SaaS', 'Mid Market Company Size', 'fit', 15, TRUE, '{"version":1,"field":"company_size","operator":"gte","value":200}'),
+        ('Acme SaaS', 'Pricing Page Intent', 'behavior', 20, TRUE, '{"version":1,"event_name":"pricing_page_viewed","aggregate_operator":"count_gte","value":2,"lookback_days":30,"property_filters":{}}'),
+        ('Acme SaaS', 'Demo Request Intent', 'behavior', 30, TRUE, '{"version":1,"event_name":"demo_requested","aggregate_operator":"count_gte","value":1,"lookback_days":30,"property_filters":{}}'),
+        ('Beta Fintech', 'Fintech ICP', 'fit', 25, TRUE, '{"version":1,"field":"industry","operator":"equals","value":"FinTech"}'),
+        ('Beta Fintech', 'Founder Persona', 'fit', 10, TRUE, '{"version":1,"field":"title","operator":"contains","value":"Founder"}'),
+        ('Beta Fintech', 'Pricing Page Intent', 'behavior', 15, TRUE, '{"version":1,"event_name":"pricing_page_viewed","aggregate_operator":"count_gte","value":3,"lookback_days":30,"property_filters":{}}'),
+        ('Beta Fintech', 'Case Study Download Intent', 'behavior', 25, TRUE, '{"version":1,"event_name":"case_study_downloaded","aggregate_operator":"count_gte","value":1,"lookback_days":14,"property_filters":{}}')
 ) AS seeded_rules (
     tenant_name,
     rule_name,

@@ -10,7 +10,11 @@ from src.repositories.lead_event_repository import LeadEventRepository
 from src.repositories.lead_repository import LeadRepository
 from src.repositories.lead_scoring_rule_repository import LeadScoringRuleRepository
 from src.repositories.tenant_repository import TenantRepository
-from src.services.lead_scoring_rule_service import LeadScoringRuleService
+from src.services.lead_scoring_rules.contracts.service import ScoringRuleContractService
+from src.services.lead_scoring_rules.service import LeadScoringRuleService
+from src.services.lead_scoring_rules.validations.behavior import BehaviorScoringRuleValidator
+from src.services.lead_scoring_rules.validations.fit import FitScoringRuleValidator
+from src.services.lead_scoring_rules.validations.service import LeadScoringRuleValidationService
 from src.services.lead_service import LeadService
 from src.services.tenant_service import TenantService
 
@@ -39,6 +43,32 @@ def get_lead_event_repository(
     return LeadEventRepository(connection)
 
 
+def get_fit_scoring_rule_validator() -> FitScoringRuleValidator:
+    """Build the fit-rule validator."""
+    return FitScoringRuleValidator()
+
+
+def get_behavior_scoring_rule_validator() -> BehaviorScoringRuleValidator:
+    """Build the behavior-rule validator."""
+    return BehaviorScoringRuleValidator()
+
+
+def get_lead_scoring_rule_validation_service(
+    fit_validator: Annotated[FitScoringRuleValidator, Depends(get_fit_scoring_rule_validator)],
+    behavior_validator: Annotated[BehaviorScoringRuleValidator, Depends(get_behavior_scoring_rule_validator)],
+) -> LeadScoringRuleValidationService:
+    """Build the scoring-rule validation service."""
+    return LeadScoringRuleValidationService(
+        fit_validator=fit_validator,
+        behavior_validator=behavior_validator,
+    )
+
+
+def get_scoring_rule_contract_service() -> ScoringRuleContractService:
+    """Build the contract discovery service for scoring rules."""
+    return ScoringRuleContractService()
+
+
 def get_tenant_service(
     tenant_repository: Annotated[TenantRepository, Depends(get_tenant_repository)],
 ) -> TenantService:
@@ -63,9 +93,14 @@ def get_lead_scoring_rule_service(
         LeadScoringRuleRepository,
         Depends(get_lead_scoring_rule_repository),
     ],
+    validation_service: Annotated[
+        LeadScoringRuleValidationService,
+        Depends(get_lead_scoring_rule_validation_service),
+    ],
 ) -> LeadScoringRuleService:
     """Build the scoring rule service with its repository dependencies."""
     return LeadScoringRuleService(
         tenant_repository=tenant_repository,
         lead_scoring_rule_repository=lead_scoring_rule_repository,
+        validation_service=validation_service,
     )
