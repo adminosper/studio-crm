@@ -141,7 +141,8 @@ Before diving into detailed specifications, this summary outlines the core opera
 
 *(Each requirement is written in detail below to address the exact system working, edge-cases, and operational nuances.)*
 
-### A. Workspace & User Provisioning (Studio Bootstrap & Tenant Onboarding)
+<details>
+<summary><h3>A. Workspace & User Provisioning (Studio Bootstrap & Tenant Onboarding)</h3></summary>
 
 This scenario covers two sequential phases: studio-level setup (performed once by the Super Admin before any tenant is provisioned) and tenant provisioning (repeated for each new startup added to the portfolio).
 
@@ -187,10 +188,13 @@ Performed for each new startup added to the portfolio.
 - For the step-by-step sequence diagram of the initial workspace creation flow, refer to [1. Initial Tenant Registration & Delegation Flow](../../documentations/architecture/user-flows.md#1-initial-tenant-registration--delegation-flow).
 - For the step-by-step sequence diagram of the onboarding and configuration flow, refer to [2. Tenant Initial Setup & Onboarding Flow](../../documentations/architecture/user-flows.md#2-tenant-initial-setup--onboarding-flow).
 
+</details>
+
 
 ---
 
-### B. Lead Management Service
+<details>
+<summary><h3>B. Lead Management Service</h3></summary>
 
 This scenario covers two distinct workflows: tenant-driven CRUD operations and system-driven automated lead generation via async processing.
 
@@ -234,9 +238,12 @@ Leads can be automatically created from user activity tracked via PostHog. This 
 - A rule must specify at minimum: the **event name** to match. Additional property filters (e.g., `plan = enterprise`) can be layered on top.
 - Only active rules are evaluated at processing time.
 
+</details>
+
 ---
 
-### C. Lead Scoring & Qualification
+<details>
+<summary><h3>C. Lead Scoring & Qualification</h3></summary>
 
 This scenario covers tenant-defined scoring rules, the batch computation pipeline, and the lifecycle transitions triggered when a lead's stage changes.
 
@@ -285,9 +292,12 @@ The `LEAD_STAGE_CHANGED_JOB` is consumed by the Outbound Worker, which owns all 
 - The Scoring Engine will not update the stage on subsequent runs, though the score is still computed and updated.
 - A rep can clear the override at any time to let the scoring engine resume control.
 
+</details>
+
 ---
 
-### D. Deal Creation & Lifecycle Management
+<details>
+<summary><h3>D. Deal Creation & Lifecycle Management</h3></summary>
 
 This scenario covers pipeline stage customization, deal tracking, and basic sales forecasting.
 
@@ -314,9 +324,12 @@ All deal operations are scoped to the authenticated user's tenant context.
 - **Formula:** For a user-selected Expected Close Date range, forecasted revenue is calculated on the fly as the sum of `Deal Amount * Current Stage Probability` for all active deals within that range.
 - **Filtering:** Users can filter the forecast by date range, owner, or account.
 
+</details>
+
 ---
 
-### E. Outbound Automation Service
+<details>
+<summary><h3>E. Outbound Automation Service</h3></summary>
 
 This scenario outlines the rules, templates, and AI orchestration parameters used to drive targeted email sequences across different prospect lifecycle stages.
 
@@ -365,10 +378,12 @@ This scenario outlines the rules, templates, and AI orchestration parameters use
 - **Rules:**
   - Automated or AI-assisted draft generation is disabled for leads that have reached the SQL / Deal stage.
   - All sales correspondence at this stage must be manually composed and sent by the assigned Sales Representative to preserve relationship integrity and alignment. (For v1)
+</details>
 
 ---
 
-### F. Parent Workspace (Super Admin View)
+<details>
+<summary><h3>F. Parent Workspace (Super Admin View)</h3></summary>
 
 This section describes features available exclusively to Venture Studio Super Admins to monitor and analyze portfolio-wide performance.
 
@@ -399,8 +414,6 @@ This section describes features available exclusively to Venture Studio Super Ad
         *   This index allows the query planner to filter by date range, join with pipeline stages, and sum amounts directly from the index (Index-Only Scan), avoiding expensive heap scans.
     *   **Performance Expectation:** Based on the V1 design envelope of 100 tenants with approx. 100 deals each (10K total deals), on-the-fly SQL aggregation utilizing these indexes will execute in **10–20ms** (steady-state, warm buffer cache) to **approx. 50ms** (worst-case: cold buffer cache, physical index page reads, WAL replay lag on the read replica) end-to-end. Both ranges are well within acceptable UI response budgets, making cached or pre-aggregated tables unnecessary for V1.
     *   **Scale Limits & Re-evaluation:** Refer to **Section 6.1 (Super Admin Rolled-Up Sales Dashboard)** for the migration path (Redis caching layer, then two-tier nightly aggregate table) if database deal volume exceeds the V1 design envelope.
-
----
 
 #### 2. AI Base Instruction Management
 
@@ -434,6 +447,7 @@ This section describes features available exclusively to Venture Studio Super Ad
     *   Tenant overrides are fully isolated. Super Admin changes to the studio-wide `base_instructions` never propagate to tenants who have custom configurations.
     *   Tenant admins cannot see or edit another tenant's configuration.
     *   Super admins in tenant context (having switched workspaces) can view and edit the tenant's custom `base_instructions` with the same UX as a tenant admin.
+</details>
 
 ---
 
